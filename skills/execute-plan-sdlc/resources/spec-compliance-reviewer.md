@@ -1,12 +1,12 @@
 # Spec Compliance Reviewer Prompt Template
 
-Use this template in Step 5c-bis when dispatching the per-wave spec compliance reviewer. Dispatch as a single agent (gemini-3.5-flash-medium) after mechanical verification passes for the wave.
+Use this template in Step 5c-bis when dispatching the per-wave spec compliance reviewer. Dispatch as a single agent (using the dynamically determined `{complianceReviewerModel}`) after mechanical verification passes for the wave.
 
 **Purpose:** Verify that agents built what was requested — nothing more, nothing less.
 
-**When to use:** After every wave containing Standard or Complex tasks, unless the full preset (Speed) was selected.
+**When to use:** After every wave containing Standard or Complex tasks, unless the `--quality minimal` (Speed) tier was selected.
 
-**When to skip:** Wave contains only Trivial tasks, or the full preset (Speed) was selected.
+**When to skip:** Wave contains only Trivial tasks, or the `--quality minimal` (Speed) tier was selected.
 
 ## How to Fill This Template
 

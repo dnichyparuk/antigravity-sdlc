@@ -460,9 +460,13 @@ The wave-runner Agent handles in-wave per-task fan-out internally — it dispatc
 
 **5c-bis. Spec compliance review (Standard and Complex tasks only):**
 
-Skip for waves containing only Trivial tasks. Skip if the Speed quality tier (`--quality full`) was selected.
+Skip for waves containing only Trivial tasks. Skip if the Speed quality tier (`--quality minimal`) was selected.
 
-After mechanical verification passes (Steps 5c.1–4), dispatch a single spec compliance reviewer (gemini-3.5-flash-high). At dispatch time, Read `./resources/spec-compliance-reviewer.md` and use it as the prompt template. Provide:
+After mechanical verification passes (Steps 5c.1–4), determine the compliance reviewer model:
+- If the wave contains only Standard tasks: use `gemini-3.5-flash-high`.
+- If the wave contains any Complex tasks or `--quality full` was selected: use `gemini-3.1-pro-low`.
+
+Dispatch a single spec compliance reviewer using the determined model. At dispatch time, Read `./resources/spec-compliance-reviewer.md` and use it as the prompt template. Provide:
 - Each non-trivial task's full specification text
 - The files each task's `WAVE_SUMMARY.tasks[].filesTouched` listed as modified
 
@@ -668,11 +672,11 @@ Fix inline if possible; report to user otherwise.
 
 **8-bis. Final spec completeness check (when OpenSpec context available):**
 
-Skip this sub-step if `openspecSpecs` is empty (no OpenSpec context was loaded in Step 1) or if the Speed quality tier (`--quality full`) was selected.
+Skip this sub-step if `openspecSpecs` is empty (no OpenSpec context was loaded in Step 1) or if the Speed quality tier (`--quality minimal`) was selected.
 
 Also skip if ALL per-wave spec compliance reviews (Step 5c-bis) passed without issues AND the plan has 3 or fewer waves — the per-wave reviews already provided sufficient coverage in that case.
 
-Otherwise, dispatch a single spec compliance reviewer (gemini-3.5-flash-high). Read `./resources/spec-compliance-reviewer.md` for the prompt template. Unlike the per-wave review in Step 5c-bis which provides only that wave's tasks, provide:
+Otherwise, determine the compliance reviewer model (use `gemini-3.1-pro-low` if any wave contained `Complex` tasks or if `--quality full` was selected; otherwise use `gemini-3.5-flash-high`). Dispatch a single spec compliance reviewer using that model. Read `./resources/spec-compliance-reviewer.md` for the prompt template. Unlike the per-wave review in Step 5c-bis which provides only that wave's tasks, provide:
 
 - **ALL non-trivial tasks from ALL waves** — full specification text from the plan
 - **Complete `git diff --stat` output** for the entire execution (all waves combined)
@@ -766,7 +770,7 @@ On failure or interruption (not all tasks completed), preserve the state file. P
 | Final verification | Full suite green |
 | No drift | Tasks match their specifications |
 | No orphans | All created files are referenced/used |
-| Spec compliance reviewed | Non-trivial waves pass spec review (unless Speed quality tier `--quality full` selected) |
+| Spec compliance reviewed | Non-trivial waves pass spec review (unless Speed quality tier `--quality minimal` selected) |
 | Final spec completeness | All delta spec requirements covered across all waves (when openspecSpecs available) |
 | Pre-wave guardrail check | Error-severity guardrails pass or user overrides (Step 5a-pre) |
 | Post-wave guardrail check | Error-severity guardrails pass, fixed, or user overrides; warnings reported (Step 5c-ter) |

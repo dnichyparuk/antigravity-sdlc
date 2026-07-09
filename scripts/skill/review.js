@@ -575,10 +575,13 @@ function main() {
   // PR metadata only relevant for branch-based scopes
   const pr = !isLocalScope ? fetchPrMetadata() : { exists: false };
 
+  const reviewSection = readSection(projectRoot, 'review') || {};
+  const configuredModel = reviewSection.subagent_model || 'gemini-3.5-flash-medium';
+
   const manifest = {
     version:        1,
     timestamp:      new Date().toISOString(),
-    subagent_model: 'gemini-3.5-flash-medium',
+    subagent_model: configuredModel,
     plugin_version: getPluginVersion(),
     scope,
     base_branch:    base || null,

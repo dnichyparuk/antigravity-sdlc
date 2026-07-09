@@ -62,6 +62,13 @@ const KNOWN_FIELDS = new Set([
 ]);
 
 const VALID_SEVERITIES = new Set(['critical', 'high', 'medium', 'low', 'info']);
+const VALID_MODELS = new Set([
+  'gemini-3.5-flash-low',
+  'gemini-3.5-flash-medium',
+  'gemini-3.5-flash-high',
+  'gemini-3.1-pro-low',
+  'gemini-3.1-pro-high',
+]);
 
 /**
  * Canonical severity vocabulary for plan/execute guardrails (R17).
@@ -205,6 +212,8 @@ function validateDimensionFile(filePath) {
   if (fm.model !== undefined) {
     if (typeof fm.model !== 'string' || fm.model.trim().length === 0) {
       warnings.push({ check: 'D13', message: `Field "model" must be a non-empty string (got: ${JSON.stringify(fm.model)})`, line: null });
+    } else if (!VALID_MODELS.has(fm.model)) {
+      warnings.push({ check: 'D13', message: `Field "model" should be one of: ${Array.from(VALID_MODELS).join(', ')} (got: "${fm.model}")`, line: null });
     }
   }
 
@@ -306,6 +315,7 @@ module.exports = {
   isValidGlob,
   KNOWN_FIELDS,
   VALID_SEVERITIES,
+  VALID_MODELS,
   GUARDRAIL_SEVERITIES,
   severityForSurface,
   validateDimensionFile,

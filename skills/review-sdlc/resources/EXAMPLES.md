@@ -32,7 +32,7 @@ skip-when:
   - "**/__fixtures__/**"
 severity: high
 max-files: 50
-model: gemini-3.5-flash-medium
+model: gemini-3.1-pro-low
 ---
 
 # Security Review (OWASP Top 10)
@@ -356,7 +356,7 @@ triggers:
   - "**/db/migrate/**"
 severity: high
 max-files: 30
-model: gemini-3.5-flash-medium
+model: gemini-3.1-pro-low
 ---
 
 # Database Migrations Review
