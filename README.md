@@ -160,7 +160,7 @@ These agents have no file in `agents/` and are dispatched as `general-purpose` u
 |---|---|---|
 | **Plan execution orchestrator** | flash-low (locked) | Executes one wave: fans out per-task coding agents in parallel, handles per-task retries with model escalation, and emits a bounded `WAVE_SUMMARY` token. |
 | **Per-task coding agent** | flash (low/mid/high) / pro-low *(depends on complexity, retries and tier)* | Implements a single plan task: reads its fact sheet, writes files, runs verification, and returns a structured completion token. |
-| **Review sub-agent** | Per-dimension override, default: flash-medium | Reviews the diff for one code review dimension and returns a structured findings list. |
+| **Review sub-agent** | Configured in `.sdlc/config.json` (`review.subagent_model`), default: flash-medium; supports per-dimension `model:` override | Reviews the diff for one code review dimension and returns a structured findings list. |
 | **Discovery sub-agent** | flash-low / flash-medium / pro-low (per dimension) | Explores code or web sources for one planning dimension and returns `F-<DIM>-<n>` tagged findings. |
 
 > **Model escalation (coding agents):** On failure, the wave-runner escalates the task's model one tier per retry, up to 2 retries, along the fixed ladder `flash-low → flash-medium → flash-high → pro-low → pro-high`: `flash-low → flash-medium → flash-high`, `flash-medium → flash-high → pro-low`, `flash-high → pro-low → pro-high`, `pro-low → pro-high → pro-high + context`.
@@ -201,6 +201,7 @@ flowchart TD
 ```
 
 - **Project-Defined Dimensions:** Code reviews are driven by project-specific dimensions (e.g., Security, Performance, API Contracts). Each dimension specifies file-matching globs and exact review instructions.
+- **Configurable & Dimension-Scoped Models:** Subagents default to the model configured in `.sdlc/config.json` (`review.subagent_model`, fallback `gemini-3.5-flash-medium`). Individual dimension files can specify an explicit `model:` override (e.g., `model: gemini-3.1-pro-low` for critical security or database migration reviews).
 - **Parallel Dispatch:** For a given diff, the orchestrator concurrently spawns multiple specialized subagents. This parallelization significantly reduces overall review time.
 - **Targeted Diff Scoping:** A subagent does not read the entire codebase or even the full PR diff. It is strictly scoped to receive only the diff hunks for files matching its dimension's triggers. This precise scoping prevents subagents from getting distracted by unrelated changes.
 - **Orchestrator Deduplication:** Once subagents complete, a central orchestrator merges the findings. It intelligently deduplicates issues flagged on the same line across different dimensions (keeping the highest severity) and catches contradictory recommendations.
@@ -224,20 +225,20 @@ Each task is classified as **Trivial**, **Standard**, or **Complex** based on sc
 
 > **Trivial batching:** when 2 or more Trivial tasks land in the same wave they are batched into a single agent dispatch running at the tier's Trivial model (e.g. flash-medium in Balanced, flash-low in Speed). A lone Trivial task runs as an individual agent at the tier's Trivial model.
 
-**Fixed-model agents (not affected by tier selection):**
+**Specialized verification & routing agents:**
 
 | Agent | Model | Notes |
 |---|---|---|
 | **Plan execution orchestrator** | flash-low | Permanently locked — performs routing only. |
-| **Spec compliance reviewer** | flash-high | **Skipped on Speed tier** and on trivial-only waves. |
+| **Spec compliance reviewer** | Dynamic (`flash-high` / `pro-low`) | Uses `gemini-3.1-pro-low` if the wave contains `Complex` tasks or `--quality full` was selected; otherwise `gemini-3.5-flash-high`. **Skipped on Speed tier** (`--quality minimal`) and trivial-only waves. |
 | **Plan execution validator** | pro-low | Always pro-low. |
 
 ### Feature Differences by Tier
 
 | Feature | Speed (`--quality minimal`) | Balanced | Quality (`--quality full`) |
 |---|---|---|---|
-| Per-wave spec compliance review | ❌ Skipped | ✅ After each non-trivial wave | ✅ After each non-trivial wave |
-| Final cross-wave spec review | ❌ Skipped | ✅ When >3 waves or a per-wave issue found | ✅ When >3 waves or a per-wave issue found |
+| Per-wave spec compliance review | ❌ Skipped | ✅ After each non-trivial wave (`flash-high`, or `pro-low` for `Complex` waves) | ✅ After each non-trivial wave (`pro-low`) |
+| Final cross-wave spec review | ❌ Skipped | ✅ When >3 waves or issue found (`flash-high`, or `pro-low` if any `Complex` tasks) | ✅ When >3 waves or issue found (`pro-low`) |
 | Tier selection prompt | ✅ Shown (unless `--quality` passed) | ✅ | ✅ |
 | Custom per-task model override | ✅ (`custom` option) | ✅ | ✅ |
 
@@ -393,3 +394,18 @@ To save plans to a folder within a specific project (such as inside the `.sdlc` 
 ```
 
 The plugin automatically creates the directory structure if it does not already exist.
+
+### Review & Execution Configuration (`.sdlc/config.json`)
+
+You can customize subagent defaults and review behavior on a per-workspace basis by creating or modifying `.sdlc/config.json` in your project root:
+
+```json
+{
+  "review": {
+    "subagent_model": "gemini-3.5-flash-medium"
+  }
+}
+```
+
+- **`review.subagent_model`**: Sets the default model for `/review-sdlc` subagents when a review dimension does not explicitly specify a `model:` override in its YAML frontmatter.
+
