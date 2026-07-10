@@ -446,7 +446,7 @@ The wave-runner Agent handles in-wave per-task fan-out internally — it dispatc
 
 3. **Conflict detection:** Check `git diff --stat` for files touched by multiple tasks in this wave. If found, treat as a file conflict.
 
-4. **Verification suite:** Run verification commands specified in the plan (tests, build, lint). **CRITICAL:** Always run tests, builds, linters, and package manager commands (such as pnpm and npm) via the truncated wrapper script to prevent context bloat: `<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/run_truncated.sh "<command>"`.
+4. **Verification suite:** Run verification commands specified in the plan (tests, build, lint). **CRITICAL:** Always run tests, builds, linters, and package manager commands (such as npm, pnpm, pnpm build, or yarn) via the truncated wrapper script to prevent context bloat: `<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/run_truncated.sh "<command>"`.
 
 5. **Task status handling** (from `WAVE_SUMMARY.tasks[].status`):
    - STATUS: DONE → proceed normally

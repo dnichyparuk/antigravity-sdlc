@@ -23,7 +23,7 @@ To prevent context bloat and token exhaustion:
 1. **Targeted File Reads (R4):** Avoid reading entire large codebase files directly into memory. When gathering context, use `<PLUGIN_ROOT>/skills/plan-sdlc/scripts/outline_file.sh <file>` to extract file structure (classes, interfaces, functions) instead of using the `view_file` tool on massive files.
 2. **Enforced Parallelism (R5):** If you need to execute multiple exploration commands, process multiple review items, or read multiple files, you MUST batch them in a single JSON tool call array rather than waiting for each to finish sequentially.
 3. **Strict Thought Protocol (R6):** Do not return an empty chat response just to explain intermediate thoughts or internal self-critiques. All internal reasoning must remain in the `thought` block. You must execute the next logical step immediately.
-4. **Truncated Test Outputs (R1):** When verifying changes (compiling, tests, linting) or running package manager commands (pnpm, npm), ALWAYS use the truncated wrapper script: `<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/run_truncated.sh "<command>"`.
+4. **Truncated Test Outputs (R1):** When verifying changes (compiling, tests, linting) or running package manager commands (e.g., npm, pnpm, pnpm build, yarn), ALWAYS use the truncated wrapper script: `<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/run_truncated.sh "<command>"`.
 
 ## Configuration
 
@@ -420,7 +420,7 @@ Post responses to PR threads, then implement accepted code changes.
 2. Simple fixes (typos, imports, naming)
 3. Complex fixes (refactoring, logic changes)
 
-For each change: make the edit, verify it compiles/passes tests (including running pnpm/npm commands) via `<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/run_truncated.sh "<command>"`, then move to the next.
+For each change: make the edit, verify it compiles/passes tests (including running npm, pnpm, pnpm build, or yarn commands) via `<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/run_truncated.sh "<command>"`, then move to the next.
 Do NOT batch changes across items.
 
 **Items marked "disagree" or "needs discussion":** Do NOT implement — await reviewer or
