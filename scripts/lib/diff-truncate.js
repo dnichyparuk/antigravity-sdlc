@@ -64,6 +64,59 @@ function truncateDiff(fullDiff, { splitDiffByFile, maxBytes = DEFAULT_DIFF_MAX_B
 
   const fileChunks = splitDiffByFile(fullDiff);
 
+  // 1. Lockfile Exclusions
+  let lockfilesExcluded = false;
+  for (const [filePath, chunk] of fileChunks.entries()) {
+    if (filePath.endsWith('package-lock.json') || filePath.endsWith('pnpm-lock.yaml') || filePath.endsWith('yarn.lock')) {
+      fileChunks.set(filePath, `diff --git a/${filePath} b/${filePath}\n# [LOCKFILE EXCLUDED - SEE --STAT SUMMARY]`);
+      lockfilesExcluded = true;
+    }
+  }
+
+  let currentDiff = Array.from(fileChunks.values()).join('');
+  if (currentDiff.length <= maxBytes) {
+    return { diff: currentDiff, diffTruncated: lockfilesExcluded, truncatedFiles: [] };
+  }
+
+  // 2. Diff-Hunk Budgeting (Context Reduction - pseudo -U1)
+  let contextReduced = false;
+  for (const [filePath, chunk] of fileChunks.entries()) {
+    if (chunk.includes('# [LOCKFILE EXCLUDED')) continue;
+    
+    const lines = chunk.split('\n');
+    const reducedLines = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (line.startsWith(' ') && !line.startsWith(' +') && !line.startsWith(' -')) {
+        // Unchanged line
+        const prev = i > 0 ? lines[i-1] : '';
+        const next = i < lines.length - 1 ? lines[i+1] : '';
+        const prevIsChange = prev.startsWith('+') || prev.startsWith('-');
+        const nextIsChange = next.startsWith('+') || next.startsWith('-');
+        const isHeader = prev.startsWith('@@') || next.startsWith('@@');
+        
+        if (prevIsChange || nextIsChange || isHeader || line.startsWith(' diff') || line.startsWith(' index')) {
+          reducedLines.push(line);
+        } else if (reducedLines.length > 0 && reducedLines[reducedLines.length - 1] !== ' ...') {
+          reducedLines.push(' ...');
+        }
+      } else {
+        reducedLines.push(line);
+      }
+    }
+    const reducedChunk = reducedLines.join('\n');
+    if (reducedChunk.length < chunk.length) {
+      fileChunks.set(filePath, reducedChunk);
+      contextReduced = true;
+    }
+  }
+
+  currentDiff = Array.from(fileChunks.values()).join('');
+  if (currentDiff.length <= maxBytes) {
+    return { diff: currentDiff, diffTruncated: true, truncatedFiles: [] };
+  }
+
+
   // Guard: if diff doesn't parse into files, return original unchanged
   if (fileChunks.size === 0) {
     return { diff: fullDiff, diffTruncated: false, truncatedFiles: [] };

@@ -43,7 +43,7 @@ const os = require('os');
 const { spawnSync } = require('child_process');
 const LIB = path.join(__dirname, '..', 'lib');
 
-const { exec, checkGitState, detectBaseBranch, parseRemoteOwner, probeGhAuth, formatAccountMismatch, probeRepoAccess, formatAccessDenied } = require(path.join(LIB, 'git'));
+const { getDiffStat, exec, checkGitState, detectBaseBranch, parseRemoteOwner, probeGhAuth, formatAccountMismatch, probeRepoAccess, formatAccessDenied } = require(path.join(LIB, 'git'));
 const { resolveMainWorktree, detectResumeState: detectResumeStateLib, readState, slugifyBranch } = require(path.join(LIB, 'state'));
 const { readSection, resolveSdlcRoot } = require(path.join(LIB, 'config'));
 const { writeOutput } = require(path.join(LIB, 'output'));
@@ -1434,7 +1434,25 @@ function main() {
   };
 
   // Exit with 1 if there are fatal errors, 0 otherwise
+  
+  let lowComplexity = false;
+  try {
+    const stat = getDiffStat(defaultBranch, projectRoot);
+    if (stat) {
+      const matchFiles = stat.match(/(\d+) files? changed/);
+      const matchIns = stat.match(/(\d+) insertions?/);
+      const matchDel = stat.match(/(\d+) deletions?/);
+      const filesChanged = parseInt(matchFiles ? matchFiles[1] : 0, 10);
+      const insertions = parseInt(matchIns ? matchIns[1] : 0, 10);
+      const deletions = parseInt(matchDel ? matchDel[1] : 0, 10);
+      if (filesChanged === 1 && (insertions + deletions) < 15) {
+        lowComplexity = true;
+      }
+    }
+  } catch (e) {}
+  result.lowComplexity = lowComplexity;
   const exitCode = errors.length > 0 ? 1 : 0;
+  
   writeOutput(result, 'ship-prepare', exitCode);
 }
 

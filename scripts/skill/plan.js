@@ -239,13 +239,17 @@ function resolveSkillTemplate(templateName) {
  * @param {{ subagentType: string, model: string, promptTemplatePath: string|null }} g17Dispatch
  * @returns {Array<{ name: string, subagentType: string, model: string, promptTemplatePath: string|null, gateIds: string[] }>}
  */
-function buildLanes(g17Dispatch) {
+function buildLanes(g17Dispatch, guardrails, projectRoot) {
+  const { validateAll } = require(require('path').join(__dirname, '..', 'lib', 'dimensions'));
+  const hasDimensions = validateAll(projectRoot).dimensions.length > 0;
+  const hasGuardrails = guardrails && guardrails.length > 0;
+
   const laneDefs = [
     {
       name: 'static-structural',
       model: 'gemini-3.5-flash-low',
       templateName: 'lane-static-structural-prompt.md',
-      gateIds: ['G1', 'G2', 'G3', 'G7', 'G12'],
+      gateIds: ['G1', 'G2', 'G3', 'G7', 'G12', ...(hasGuardrails ? [] : ['G14']), ...(hasDimensions ? [] : ['G17'])],
     },
     {
       name: 'content-coverage',
@@ -259,12 +263,12 @@ function buildLanes(g17Dispatch) {
       templateName: 'lane-file-existence-prompt.md',
       gateIds: ['G4', 'G10'],
     },
-    {
+      ...(hasGuardrails ? [{
       name: 'guardrail-compliance',
       model: 'gemini-3.5-flash-medium',
       templateName: 'lane-guardrail-compliance-prompt.md',
       gateIds: ['G14'],
-    },
+    }] : []),
   ];
 
   const lanes = laneDefs.map(def => ({
@@ -276,13 +280,15 @@ function buildLanes(g17Dispatch) {
   }));
 
   // Entry [4]: dimension-coverage — mirrors g17Dispatch verbatim (backwards compatibility)
-  lanes.push({
-    name: 'dimension-coverage',
-    subagentType: g17Dispatch.subagentType,
-    model: g17Dispatch.model,
-    promptTemplatePath: g17Dispatch.promptTemplatePath,
-    gateIds: ['G17'],
-  });
+    if (hasDimensions) {
+    lanes.push({
+      name: 'dimension-coverage',
+      subagentType: g17Dispatch.subagentType,
+      model: g17Dispatch.model,
+      promptTemplatePath: g17Dispatch.promptTemplatePath,
+      gateIds: ['G17'],
+    });
+  }
 
   return lanes;
 }
@@ -557,7 +563,7 @@ function main() {
   }
 
   // 6. P16/P17 — lane fan-out and lens reviewer signals (R35, R36 — Fixes #418)
-  const lanes = buildLanes(g17Dispatch);
+  const lanes = buildLanes(g17Dispatch, guardrails, projectRoot);
   const lensReviewers = buildLensReviewers();
   // Warn for any lane with null promptTemplatePath (non-G17 lanes only; G17 already warned above)
   lanes.slice(0, 4).forEach(lane => {

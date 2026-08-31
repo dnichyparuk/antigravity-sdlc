@@ -28,8 +28,9 @@ const fs   = require('fs');
 const path = require('path');
 const LIB = path.join(__dirname, '..', 'lib');
 
-const {
-  exec,
+const { truncateDiff } = require('../lib/diff-truncate');
+const { splitDiffByFile } = require('../lib/git');
+const { exec,
   checkGitState,
   detectBaseBranch,
   fetchBaseRef,
@@ -440,7 +441,8 @@ function main() {
   // Non-fatal — offline / no-origin / auth-denied all silently pass.
   fetchBaseRef(baseBranch, projectRoot);
   const diffStat    = getDiffStat(baseBranch, projectRoot);
-  const diffContent = getDiffContent(baseBranch, projectRoot);
+  const rawDiff = getDiffContent(baseBranch, projectRoot);
+  const diffContent = rawDiff ? truncateDiff(rawDiff, { splitDiffByFile, maxBytes: 8000 }).diff : '';
 
   if (!diffContent) {
     warnings.push(`No diff found between "${baseBranch}" and HEAD.`);
