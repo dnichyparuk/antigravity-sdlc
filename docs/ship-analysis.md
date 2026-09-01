@@ -155,10 +155,10 @@ All Gemini Flash references across the plugin are upgraded to the latest **Gemin
 
 | Component Category | Legacy Model Target (v3.5) | Upgraded Latest Model (v3.7) |
 |---|---|---|
-| **Low-Reasoning Orchestrators** | `gemini-3.5-flash-low` | `gemini-3.7-flash-low` |
-| **Standard Skills & Coordinators** | `gemini-3.5-flash-medium` | `gemini-3.7-flash-medium` |
-| **High-Context Skills & Fix Loops** | `gemini-3.5-flash-high` | `gemini-3.7-flash-high` |
-| **Dispatch Budget Ceiling** | `gemini-3.5-flash` | `gemini-3.7-flash` |
+| **Low-Reasoning Orchestrators** | `gemini-3.7-flash-low` | `gemini-3.7-flash-low` |
+| **Standard Skills & Coordinators** | `gemini-3.7-flash-medium` | `gemini-3.7-flash-medium` |
+| **High-Context Skills & Fix Loops** | `gemini-3.7-flash-high` | `gemini-3.7-flash-high` |
+| **Dispatch Budget Ceiling** | `gemini-3.7-flash` | `gemini-3.7-flash` |
 
 ---
 
