@@ -17,3 +17,9 @@ node_modules/
 *-manifest-*.json
 *-prepare-*.json
 # <<< lift-sdlc managed
+
+# >>> sdlc-utilities managed v3 (do not edit) — transient skill artifacts
+*-context-*.json
+*-manifest-*.json
+*-prepare-*.json
+# <<< sdlc-utilities managed
