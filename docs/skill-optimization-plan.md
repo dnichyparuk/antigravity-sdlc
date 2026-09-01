@@ -56,7 +56,9 @@ To safely refactor the plugin while maintaining stability and enforcing cross-pl
 
 ### Phase 5: Legacy Script Modernization & Test Coverage
 *Target: Migrate all existing .sh wrapper scripts to pure Node.js (.js) and mandate test coverage.*
-- [ ] **Global Script Conversion**: Audit all skills/*/scripts/*.sh files (e.g., prepare.sh, cleanup.sh, 	odos_wrapper.sh) and rewrite them as pure Node.js execution scripts.
+- [ ] **Global Script Conversion**: Audit all skills/*/scripts/*.sh files (e.g., workspace_setup.sh, prepare.sh) and rewrite them as pure Node.js scripts.
+- [ ] **Eliminate Sub-process Hacks**: Replace brittle Bash-isms like inline 
+ode -e eval hacks, Unix-specific pipes (/dev/null), and text tools (sed) with native Node.js equire() imports, string manipulation, and cross-platform child_process methods.
 - [ ] **Direct Invocation**: Update all SKILL.md files to invoke 
 ode <script>.js instead of the legacy bash wrappers, eliminating the Bash middleman entirely.
-- [ ] **Test Coverage Mandate**: Ensure all newly written and migrated Node.js scripts are fully backed by unit/integration tests (e.g., via Jest or Mocha) to guarantee deterministic git interactions, JSON parsing reliability, and flawless cross-platform execution (Windows/Linux).
+- [ ] **Test Coverage Mandate**: Ensure all newly written and migrated Node.js scripts are fully backed by unit/integration tests to guarantee deterministic git interactions, JSON parsing reliability, and flawless cross-platform execution (Windows/Linux).
