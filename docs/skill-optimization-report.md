@@ -2,6 +2,9 @@
 
 This report consolidates findings from 14 background subagents.
 
+*The actionable roadmap derived from this report is available in the [Skill Optimization Plan](./skill-optimization-plan.md).*
+
+
 ---
 
 The following is a <SYSTEM_MESSAGE> not actually sent by the user. It is provided by the system as important information to pay attention to.
@@ -703,5 +706,6 @@ Emit exactly one single-line JSON to stdout (all progress/logs go to stderr):
 </SYSTEM_MESSAGE>
 
 ---
+
 
 

@@ -1,6 +1,8 @@
 # Legacy Script Migration Plan (Bash to Node.js)
 
 ## 1. Objective
+*This modernization plan was spun out of the findings detailed in the [Skill Optimization Report](./skill-optimization-report.md).*
+
 Migrate all existing `.sh` Bash wrapper scripts across the `lift-sdlc` plugin to pure Node.js (`.js`).
 
 ## 2. Rationale & Anti-Patterns
@@ -29,3 +31,4 @@ Migrate all existing `.sh` Bash wrapper scripts across the `lift-sdlc` plugin to
 ### Phase 4: Prompt Updates & Test Coverage
 - [ ] **Direct Invocation**: Update all `SKILL.md` files to invoke `node <script>.js` instead of the legacy bash wrappers, eliminating the Bash middleman entirely.
 - [ ] **Test Mandate**: Ensure all migrated Node.js scripts are fully backed by unit tests to guarantee reliable git execution and JSON validation across OS boundaries.
+

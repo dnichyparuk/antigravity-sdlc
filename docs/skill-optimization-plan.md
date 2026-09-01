@@ -1,6 +1,8 @@
 # Lift-SDLC Skill Optimization Plan
 
 ## 1. Objective & Validation
+*See the full evidence and raw analysis in the [Skill Optimization Report](./skill-optimization-report.md).*
+
 Reduce the token footprint of all 14 `lift-sdlc` skill prompts by 40–60% without losing any architectural safety nets, quality gates, or core agent capabilities. Reductions exclusively target instructional bloat, repetitive defensive prompting, and raw shell orchestration logic.
 
 ## 2. Identified Anti-Patterns
@@ -45,3 +47,4 @@ Reduce the token footprint of all 14 `lift-sdlc` skill prompts by 40–60% witho
 *Target: Strip human-targeted background context from LLM context.*
 - [ ] **Global**: Search and destroy all requirement tags (e.g. `R1`, `C5`), GitHub issue cross-references (`Fixes #123`), and design rationales.
 - [ ] **`plan-sdlc` & `ship-sdlc`**: Remove multi-paragraph explanations of background engine hook lifecycles.
+
