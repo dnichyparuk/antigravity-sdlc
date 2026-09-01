@@ -52,3 +52,11 @@ To safely refactor the plugin while maintaining stability and enforcing cross-pl
 *Target: Strip human-targeted background context.*
 - [ ] **Global**: Search and destroy all requirement tags (e.g. `R1`, `C5`), GitHub issue cross-references (`Fixes #123`), and design rationales (e.g. "Why config.changelog, not flags.changelog").
 - [ ] **`plan-sdlc` & `ship-sdlc`**: Remove multi-paragraph explanations of background engine hook lifecycles.
+
+
+### Phase 5: Legacy Script Modernization & Test Coverage
+*Target: Migrate all existing .sh wrapper scripts to pure Node.js (.js) and mandate test coverage.*
+- [ ] **Global Script Conversion**: Audit all skills/*/scripts/*.sh files (e.g., prepare.sh, cleanup.sh, 	odos_wrapper.sh) and rewrite them as pure Node.js execution scripts.
+- [ ] **Direct Invocation**: Update all SKILL.md files to invoke 
+ode <script>.js instead of the legacy bash wrappers, eliminating the Bash middleman entirely.
+- [ ] **Test Coverage Mandate**: Ensure all newly written and migrated Node.js scripts are fully backed by unit/integration tests (e.g., via Jest or Mocha) to guarantee deterministic git interactions, JSON parsing reliability, and flawless cross-platform execution (Windows/Linux).
