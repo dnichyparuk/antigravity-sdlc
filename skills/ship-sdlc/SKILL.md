@@ -398,12 +398,12 @@ Ship-sdlc retains full control of: pipeline table display, validation output, st
 
 ### Main-thread TodoWrite orchestration (R-todowrite-visibility, #427)
 
-ship-sdlc surfaces live pipeline progress in the Antigravity Code task tray via main-thread `TodoWrite` calls. All derivation logic lives in `scripts/lib/ship-todos.js` (R-todowrite-visibility clause 11). The MAIN thread invokes the helper via Bash and passes the returned `todos[]` array to the `TodoWrite` tool. The helper's `marker` field is echoed verbatim to stdout (audit trail when the tray is hidden).
+ship-sdlc surfaces live pipeline progress in the Antigravity Code task tray via main-thread `TodoWrite` calls (if the tool is available in the current environment). All derivation logic lives in `scripts/lib/ship-todos.js` (R-todowrite-visibility clause 11). The MAIN thread invokes the helper via Bash and passes the returned `todos[]` array to the `TodoWrite` tool. The helper's `marker` field is echoed verbatim to stdout (audit trail when the tray is hidden).
 
 **Setup (one-time, BEFORE the Step 5 dispatch loop, only when `flags.steps.length >= 2`):**
 
 1. Run: `<PLUGIN_ROOT>/skills/ship-sdlc/scripts/todos_wrapper.sh --state-file "$STATE_FILE" --event init` (where `$STATE_FILE` is the resolved ship state file path from Step 1c output).
-2. Parse JSON from stdout. Call `TodoWrite` with `todos` array.
+2. Parse JSON from stdout. If the `TodoWrite` tool is available in your environment, call it with the `todos` array. Otherwise, safely ignore the tool call.
 3. Echo `marker` verbatim to stdout.
 
 For ultra-short runs (`flags.steps.length < 2`), skip TodoWrite entirely.
@@ -411,25 +411,25 @@ For ultra-short runs (`flags.steps.length < 2`), skip TodoWrite entirely.
 **Per-step transition (called at start of EACH Step 5 iteration, BEFORE the verbose progress header):**
 
 1. Run: `<PLUGIN_ROOT>/skills/ship-sdlc/scripts/todos_wrapper.sh --state-file "$STATE_FILE" --event step --current-step <stepName>`.
-2. Parse JSON, call `TodoWrite`, echo `marker`.
+2. Parse JSON. If the `TodoWrite` tool is available, call it. Echo `marker` verbatim to stdout.
 
 **Per-step completion (called AFTER the Agent return and result print, AFTER `state/ship.js complete` records success):**
 
 <!-- Ordering required: `state/ship.js complete` must persist status=completed BEFORE this call;
      ship-todos reads the state file to derive substep statuses, so completion must be on disk first. -->
 1. Run: `<PLUGIN_ROOT>/skills/ship-sdlc/scripts/todos_wrapper.sh --state-file "$STATE_FILE" --event step --current-step <stepName> --mark-completed <stepName>`.
-2. Parse JSON, call `TodoWrite`, echo `marker`.
+2. Parse JSON. If the `TodoWrite` tool is available, call it. Echo `marker` verbatim to stdout.
 
 **Per-step failure (called when `state/ship.js fail` records a failure):**
 
 1. Run: `<PLUGIN_ROOT>/skills/ship-sdlc/scripts/todos_wrapper.sh --state-file "$STATE_FILE" --event step --current-step <stepName> --fail-step <stepName>`.
-2. Parse JSON, call `TodoWrite`, echo `marker`.
+2. Parse JSON. If the `TodoWrite` tool is available, call it. Echo `marker` verbatim to stdout.
 3. No todo lingers in_progress (helper enforces — AC4).
 
 **Resume reconstruction (called inside the existing implicit-resume banner block, BEFORE the pipeline table prints, when `flags.resume === true`):**
 
 1. Run: `<PLUGIN_ROOT>/skills/ship-sdlc/scripts/todos_wrapper.sh --state-file "$STATE_FILE" --event resume --current-step <resume.nextPendingStep>`.
-2. Parse JSON, call `TodoWrite`, echo `marker`.
+2. Parse JSON. If the `TodoWrite` tool is available, call it. Echo `marker` verbatim to stdout.
 
 `flags.resume === true` is the single gate (the prepare script unifies explicit `--resume` and `flags.implicitResume`; this matches the existing implicit-resume banner condition and satisfies `no-opposite-logical-vectors`).
 
@@ -501,7 +501,7 @@ Before dispatching `execute-plan-sdlc`, run:
 > - **Input**: `--state-file`, `--event`, `--current-step`.
 > - **Output**: Updates the IDE Todo UI and prints confirmation.
 
-`$PLAN_FILE` is the resolved plan file path. The helper expands the `execute` step's placeholder substep to one substep per plan task (one `### Task N:` heading per substep). Parse JSON, call `TodoWrite`, echo `marker`.
+`$PLAN_FILE` is the resolved plan file path. The helper expands the `execute` step's placeholder substep to one substep per plan task (one `### Task N:` heading per substep). Parse JSON. If the `TodoWrite` tool is available, call it. Echo `marker` verbatim to stdout.
 
 Then dispatch `execute-plan-sdlc` as below. On Agent return (success), run the post-execution completeness invariant **before** marking the step complete (R-INVARIANT-COMPLETENESS, #432):
 
@@ -782,7 +782,7 @@ Before invoking the cleanup Bash command, run:
 > - **Input**: `--state-file`, `--event`, `--current-step`.
 > - **Output**: Updates the IDE Todo UI and prints confirmation.
 
-Call `TodoWrite`, echo `marker`. After the cleanup command returns (success or contract violation), run per-step-completion with `--mark-completed cleanup`.
+If the `TodoWrite` tool is available, call it. Echo `marker`. After the cleanup command returns (success or contract violation), run per-step-completion with `--mark-completed cleanup`.
 
 Selection rule: walk `steps[]` and check whether any prior step's recorded status (from the live state file, not the prepare snapshot) is `failed`. If so, dispatch with `step.invocation.forced`; otherwise dispatch with `step.invocation.normal`. `$SCRIPT` is the same `state/ship.js` path resolved in the state-persistence section above.
 
