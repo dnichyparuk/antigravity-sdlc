@@ -64,6 +64,14 @@ function truncateDiff(fullDiff, { splitDiffByFile, maxBytes = DEFAULT_DIFF_MAX_B
 
   const fileChunks = splitDiffByFile(fullDiff);
 
+  // Guard: if the diff doesn't parse into per-file chunks, return the original
+  // unchanged. Must run before any code below derives `currentDiff` from
+  // `fileChunks` — an empty Map joins to `''`, which is `<= maxBytes` and would
+  // otherwise trigger an early return of an empty diff instead of this fallback.
+  if (fileChunks.size === 0) {
+    return { diff: fullDiff, diffTruncated: false, truncatedFiles: [] };
+  }
+
   // 1. Lockfile Exclusions
   let lockfilesExcluded = false;
   for (const [filePath, chunk] of fileChunks.entries()) {
@@ -95,7 +103,7 @@ function truncateDiff(fullDiff, { splitDiffByFile, maxBytes = DEFAULT_DIFF_MAX_B
         const nextIsChange = next.startsWith('+') || next.startsWith('-');
         const isHeader = prev.startsWith('@@') || next.startsWith('@@');
         
-        if (prevIsChange || nextIsChange || isHeader || line.startsWith(' diff') || line.startsWith(' index')) {
+        if (prevIsChange || nextIsChange || isHeader) {
           reducedLines.push(line);
         } else if (reducedLines.length > 0 && reducedLines[reducedLines.length - 1] !== ' ...') {
           reducedLines.push(' ...');
@@ -114,12 +122,6 @@ function truncateDiff(fullDiff, { splitDiffByFile, maxBytes = DEFAULT_DIFF_MAX_B
   currentDiff = Array.from(fileChunks.values()).join('');
   if (currentDiff.length <= maxBytes) {
     return { diff: currentDiff, diffTruncated: true, truncatedFiles: [] };
-  }
-
-
-  // Guard: if diff doesn't parse into files, return original unchanged
-  if (fileChunks.size === 0) {
-    return { diff: fullDiff, diffTruncated: false, truncatedFiles: [] };
   }
 
   // Sort descending by chunk size (largest first — most signal)

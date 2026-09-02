@@ -12,7 +12,7 @@ This document provides a comprehensive analysis of the execution pipeline, plann
 
 ### 2. Step 1 — Load Config, Parse Flags & Detect Context
 - Loads `.sdlc/local.json` and `.sdlc/config.json` configuration hierarchy.
-- Executes [`prepare.sh`](../skills/ship-sdlc/scripts/prepare.sh) (`skill/ship.js`) to detect active branch, uncommitted changes, open PRs, and OpenSpec state.
+- Executes `skill/ship.js` to detect active branch, uncommitted changes, open PRs, and OpenSpec state.
 - Resolves Quality Tier preset (`minimal`, `balanced`, `full`).
 
 ### 3. Step 2 & 3 — Build Execution Plan & Validation Critique

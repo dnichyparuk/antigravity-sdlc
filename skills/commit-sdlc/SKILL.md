@@ -3,7 +3,7 @@ name: commit-sdlc
 description: "Use this skill when committing staged changes, creating a git commit, or generating a commit message. Analyzes staged diff and recent commit history to generate a message matching the project's style. Stashes unstaged changes to isolate the commit, commits after user confirmation, and auto-restores the stash. Arguments: [--no-stash] [--scope <scope>] [--type <type>] [--amend] [--auto] [--force-default-branch]. Use --auto to skip interactive approval. Triggers on: commit changes, create commit, write commit message, git commit, smart commit, commit staged, stage and commit."
 user-invocable: true
 argument-hint: "[--no-stash] [--scope <scope>] [--type <type>] [--amend] [--auto] [--force-default-branch]"
-model: gemini-3.7-flash-low
+model: gemini-3.7-flash-medium
 ---
 
 
@@ -38,7 +38,7 @@ If the system context contains "Plan mode is active":
 > **VERBATIM** — Execute this command directly with `node` and the absolute plugin path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict CLI location pattern: `<PLUGIN_ROOT>/scripts/<skill|util|lib>/<script-name>.js`). Do not modify, rephrase, or simplify the flags.
 
 ```shell
-node "<PLUGIN_ROOT>/scripts/skill/commit.js" --output-file $ARGUMENTS
+node "<PLUGIN_ROOT>/scripts/skill/commit.js" $ARGUMENTS
 ```
 > **Contract (Input/Output):**
 > - **Input**: `$ARGUMENTS` (the skill's own arguments), forwarded verbatim.

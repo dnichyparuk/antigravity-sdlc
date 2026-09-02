@@ -21,6 +21,14 @@ const { execSync, spawnSync } = require('node:child_process');
 // Core exec helper
 // ---------------------------------------------------------------------------
 
+// execSync's own default maxBuffer (1 MiB) is far too small for `git diff`/`git log`
+// output on a large changeset — exceeding it throws ERR_CHILD_PROCESS_STDOUT_MAXBUFFER,
+// which this function's catch-and-return-null behavior silently turns into "empty output"
+// rather than a visible error. Callers that read a null/empty result as "no diff content"
+// then report a false-clean result instead of surfacing the real failure. Default to a
+// generous buffer; callers may still override via `opts.maxBuffer`.
+const DEFAULT_MAX_BUFFER = 200 * 1024 * 1024; // 200 MiB
+
 /**
  * Run a shell command and return trimmed stdout, or null on failure.
  * @param {string} cmd
@@ -31,7 +39,7 @@ const { execSync, spawnSync } = require('node:child_process');
 function exec(cmd, opts = {}) {
   const { throwOnError, ...execOpts } = opts;
   try {
-    return execSync(cmd, { encoding: 'utf8', ...execOpts }).trim();
+    return execSync(cmd, { encoding: 'utf8', maxBuffer: DEFAULT_MAX_BUFFER, ...execOpts }).trim();
   } catch (err) {
     if (throwOnError) throw err;
     return null;
