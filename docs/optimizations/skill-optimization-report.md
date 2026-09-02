@@ -606,7 +606,7 @@ nts directly to `prepare.sh`.
 2. **Output Failure Summary Preview Directly from `prepare.sh`**:
    * *Current state*: Step 2 (24 lines) tells the LLM to selectively read partial fields (`failure.*`, `classification_hint`) from `MANIFEST_FILE` without loading the full manifest.
    * *Opportunity*: `prepare.sh` / `harden-prepare.js` can print the 5-line formatted preview directly to stdout, eliminating LLM JSON partial-parsing instructions.
-3. **Deterministic Proposal Application & Validation (`harden-apply.js`)**:
+3. **Deterministic Proposal Application & Validation (proposed: `harden-apply.js`)**:
    * *Current state*: Step 5a/5b (lines 187–240) requires the LLM to manually construct merged JSON in memory for config guardrails, patch review dimensions, run validator bash scripts, and handle `consolidate` ID lookups/merges.
    * *Discrepancy*: `validate_guardrails.sh` validates `.sdlc/config.json` on disk, creating a mismatch with the instruction to construct prospective JSON in memory before writing.
    * *Opportunity*: A single CLI helper (e.g., `node scripts/skill/harden-apply.js --target <file> --proposal '<json>'`) can deterministically validate, merge (`add`/`strengthen`/`consolidate`), and write disk changes atomically, returning clear pass/fail status to the agent.

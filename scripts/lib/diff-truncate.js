@@ -35,6 +35,10 @@
 
 const DEFAULT_DIFF_MAX_BYTES = 8000;
 
+const LOCKFILE_NAMES = ['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock'];
+const LOCKFILE_EXCLUDED_MARKER = '# [LOCKFILE EXCLUDED - SEE --STAT SUMMARY]';
+const DIFF_ELLIPSIS = ' ...';
+
 /**
  * File-aware diff truncation. The caller MUST inject
  * `splitDiffByFile(diff) -> Map<filePath, chunkText>` (typically
@@ -75,8 +79,8 @@ function truncateDiff(fullDiff, { splitDiffByFile, maxBytes = DEFAULT_DIFF_MAX_B
   // 1. Lockfile Exclusions
   let lockfilesExcluded = false;
   for (const [filePath, chunk] of fileChunks.entries()) {
-    if (filePath.endsWith('package-lock.json') || filePath.endsWith('pnpm-lock.yaml') || filePath.endsWith('yarn.lock')) {
-      fileChunks.set(filePath, `diff --git a/${filePath} b/${filePath}\n# [LOCKFILE EXCLUDED - SEE --STAT SUMMARY]`);
+    if (LOCKFILE_NAMES.some(name => filePath.endsWith(name))) {
+      fileChunks.set(filePath, `diff --git a/${filePath} b/${filePath}\n${LOCKFILE_EXCLUDED_MARKER}`);
       lockfilesExcluded = true;
     }
   }
@@ -89,7 +93,7 @@ function truncateDiff(fullDiff, { splitDiffByFile, maxBytes = DEFAULT_DIFF_MAX_B
   // 2. Diff-Hunk Budgeting (Context Reduction - pseudo -U1)
   let contextReduced = false;
   for (const [filePath, chunk] of fileChunks.entries()) {
-    if (chunk.includes('# [LOCKFILE EXCLUDED')) continue;
+    if (chunk.includes(LOCKFILE_EXCLUDED_MARKER)) continue;
     
     const lines = chunk.split('\n');
     const reducedLines = [];
@@ -105,8 +109,8 @@ function truncateDiff(fullDiff, { splitDiffByFile, maxBytes = DEFAULT_DIFF_MAX_B
         
         if (prevIsChange || nextIsChange || isHeader) {
           reducedLines.push(line);
-        } else if (reducedLines.length > 0 && reducedLines[reducedLines.length - 1] !== ' ...') {
-          reducedLines.push(' ...');
+        } else if (reducedLines.length > 0 && reducedLines[reducedLines.length - 1] !== DIFF_ELLIPSIS) {
+          reducedLines.push(DIFF_ELLIPSIS);
         }
       } else {
         reducedLines.push(line);

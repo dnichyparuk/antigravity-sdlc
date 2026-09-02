@@ -24,6 +24,8 @@
  *   0 = success
  *   1 = state file not found (read/cleanup)
  *   2 = unexpected error
+ *   65 = verify-completeness only — one or more planned tasks unaccounted
+ *        for (BSD EX_DATAERR; see that command's own docstring below)
  */
 
 'use strict';

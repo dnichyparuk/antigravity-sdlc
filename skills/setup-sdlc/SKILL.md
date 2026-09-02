@@ -176,7 +176,7 @@ Store the resolved section ids as `selectedIds`. Defer migration and field colle
 `needsMigration` is true when ANY of these conditions hold:
 - A legacy config file exists (`.sdlc/version.json`, `.sdlc/ship-config.json`, `.sdlc/jira-config.json`, `.sdlc/review.json`, `.sdlc/review.json`)
 - `.sdlc/config.json` contains misplaced sections (e.g. `ship` in the project config)
-- `.sdlc/local.json` is v1 schema — has legacy `ship.preset` or `ship.skip` keys, or lacks the top-level `version: 2` stamp (`localIsV1` from prepare output). Auto-migrated by `lib/config.js::readLocalConfig` on next read; `--migrate` triggers it explicitly with a banner.
+- `.sdlc/local.json` is v1 schema — has legacy `ship.preset` or `ship.skip` keys, or lacks the top-level `version: 2` stamp (`localIsV1` from prepare output). `readLocalConfig` never migrates on read (it is a pure read, no write) — the fix is re-running the `ship` section through Step 3 below, which fully replaces the section via `writeLocalConfig` and stamps the current schema version.
 - `legacy.jiraTemplates.exists` is true (`.sdlc/jira-templates/` detected — implements R-LEGACY-DETECT, #423)
 
 If legacy files exist or `projectConfig.misplaced` is non-empty, use AskUserQuestion:
@@ -191,7 +191,7 @@ Options:
 - **yes** -- migrate now (recommended)
 - **no** -- configure from scratch
 
-On **yes**: there is no separate migration command to run — standalone legacy-migration support was removed, and the two former shims (`migrate-config`, `migrate-jira`) were already no-ops. `lib/config.js::readLocalConfig` auto-migrates a v1 `.sdlc/local.json` on the next read, so re-run the Step 0 prepare command to trigger it and refresh state:
+On **yes**: there is no separate migration command to run, and no automatic migration happens on read — `lib/config.js::readLocalConfig` is a pure read with no write path, and `config-version.js::verifyAndMigrate` never migrates either (its own docstring: "No migrations are performed"; it always returns `migrated: false`). The actual fix is to go through the `ship` section in Step 3 below: `writeLocalConfig` does a top-level merge, so writing a fresh `ship` value there fully replaces the old `preset`/`skip` object and stamps the current `schemaVersion` in the same write. Re-run the Step 0 prepare command first to refresh state, then proceed to Step 3 and select the `ship` section:
 
 ```shell
 node "<PLUGIN_ROOT>/scripts/skill/setup.js" $ARGUMENTS
