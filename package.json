@@ -3,7 +3,7 @@
   "version": "0.21.0",
   "private": true,
   "engines": {
-    "node": ">=20.19.0"
+    "node": "^20.19.0 || ^22.13.0 || >=24"
   },
   "scripts": {
     "test": "node --test 'scripts/**/*.test.js' 'skills/**/*.test.js'",
