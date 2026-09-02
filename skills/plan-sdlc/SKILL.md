@@ -113,7 +113,7 @@ Naming convention: `YYYY-MM-DD-<feature-name>.md`. Create the directory if neede
 
 **Plan mode:** Write to the designated plan file path. Skip path resolution.
 
-**planFile marker (consumed by `hooks/stop-plan-integrity.js`):** After path resolution, record the resolved plan path in the plan integrity state. Run in both plan-mode and normal-mode branches. Marker writes are best-effort — swallow any error (`2>/dev/null || true`) so a failed marker never blocks plan creation.
+**planFile marker (intended to be consumed by a `hooks/stop-plan-integrity.js` Stop hook):** After path resolution, record the resolved plan path in the plan integrity state. Run in both plan-mode and normal-mode branches. Marker writes are best-effort — swallow any error (`2>/dev/null || true`) so a failed marker never blocks plan creation. **`hooks/stop-plan-integrity.js` does not exist in this repo and is not registered in `hooks.json`** — the marker file is currently written but never read back; no Stop hook verifies plan integrity today. See `resources/state-format.md` for the designed (not-yet-built) contract.
 
 ```shell
 node "<PLUGIN_ROOT>/scripts/skill/plan.js" --mark plan-file --path "<resolved-plan-path>" 2>/dev/null || true
@@ -380,7 +380,7 @@ node "<PLUGIN_ROOT>/scripts/skill/plan-handoff-advisory.js"
 > - **Input**: None.
 > - **Output**: Prints advisory text for downstream agent handoff.
 
-The script reads `$TMPDIR/sdlc-context-stats.json` (written by the `UserPromptSubmit` hook `hooks/context-stats.js`) and emits a `/compact` advisory only when transcript ≥60% of model budget. Pipeline state is preserved across `/compact` (PreCompact + SessionStart hooks), so re-invoking after compaction is safe.
+The script reads `$TMPDIR/sdlc-context-stats.json` and emits a `/compact` advisory only when transcript ≥60% of model budget. **The sidecar's producer, a `UserPromptSubmit` hook at `hooks/context-stats.js`, does not exist and is not registered in `hooks.json`** — the sidecar file is therefore never written today, so this advisory currently never fires (the reader degrades to a silent no-op when the sidecar is absent, by design). Pipeline state is preserved across `/compact` (PreCompact + SessionStart hooks), so re-invoking after compaction is safe.
 
 **Plan mode:** Announce the plan path and propose execution. Prepend any advisory output from the wrapper above the `ship` / `execute` lines:
 

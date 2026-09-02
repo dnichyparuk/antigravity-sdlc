@@ -18,7 +18,7 @@ conditionally after Step 2 classifies the operation type.
 > 3. Detect placeholders via the C13 regex; escalate every `low`-confidence marker via `AskUserQuestion`
 > 4. Build the proposed payload
 > 5. Critique — emit the `Initial:` / `Critique:` / `Final:` block, then call `lib/artifact-store.js` `writeCritique(hash, ...)`
-> 6. Approval gate — `AskUserQuestion` with `approve` / `change <what>` / `cancel`; on `approve` call `lib/artifact-store.js` `writeApprovalToken(hash)`. The PreToolUse hook (`hooks/pre-tool-jira-write-guard.js`) verifies the artifacts written by steps 5–6 and BLOCKS dispatch otherwise
+> 6. Approval gate — `AskUserQuestion` with `approve` / `change <what>` / `cancel`; on `approve` call `lib/artifact-store.js` `writeApprovalToken(hash)`. No PreToolUse hook exists to verify the artifacts written by steps 5–6 or block dispatch if they're missing — `hooks/pre-tool-jira-write-guard.js` is not implemented and not registered in `hooks.json`. Step 7 dispatch is gated by LLM instruction-following only; verify both artifacts yourself before dispatching
 > 7. Dispatch the MCP write call
 > 8. Post-op cache update
 >

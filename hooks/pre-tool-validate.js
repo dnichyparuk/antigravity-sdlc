@@ -20,7 +20,7 @@ try {
   }
 } catch {
   // Stdin unreadable or non-JSON — fail closed, consistent with the other
-  // PreToolUse guard hooks (pre-tool-git-guard.js, pre-tool-file-guard.js).
+  // PreToolUse guard hook (pre-tool-git-guard.js).
   process.stdout.write(JSON.stringify({ decision: 'deny', reason: 'guard hook could not parse tool-call input' }) + '\n');
   process.exit(0);
 }

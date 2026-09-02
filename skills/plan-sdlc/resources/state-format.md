@@ -1,6 +1,8 @@
 # Plan-SDLC State File Format
 
-The `plan-sdlc` skill writes a JSON marker file to `.sdlc/execution/` at the start of each planning invocation. This file records integrity checkpoints so the `stop-plan-integrity.js` Stop hook can verify that all quality gates were reached before the plan was presented.
+> **Status: consumer not implemented.** The marker-writing side described below (`skill/plan.js --mark ...`) is real and runs today. The consuming side — a `hooks/stop-plan-integrity.js` Stop hook — **does not exist in this repo and is not registered in `hooks.json`**. Markers are currently written but never read back or verified; nothing enforces the integrity checkpoints described in this document yet. The rest of this file documents the designed (not-yet-built) contract for that hook.
+
+The `plan-sdlc` skill writes a JSON marker file to `.sdlc/execution/` at the start of each planning invocation. This file records integrity checkpoints intended to let a `stop-plan-integrity.js` Stop hook (not yet implemented — see status note above) verify that all quality gates were reached before the plan was presented.
 
 ---
 
@@ -76,7 +78,7 @@ Each field inside `planIntegrity` is an ISO 8601 timestamp string. Absence of a 
 
 ### Consume-then-Delete
 
-`hooks/stop-plan-integrity.js` runs at session end (Stop hook):
+**Not yet implemented** (see status note at the top of this document). The design intent is a `hooks/stop-plan-integrity.js` Stop hook that would run at session end:
 
 1. Calls `findStateFile('plan', branchSlug)` and captures the returned path.
 2. Reads the marker via `readState`.

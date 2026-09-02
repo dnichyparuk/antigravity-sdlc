@@ -128,7 +128,7 @@ echo "STATUS: $?"
 
 Parse the output JSON from `$PREPARE_OUTPUT_FILE`. If `errors` is non-empty, display them and stop. The parsed output replaces manual computation in subsequent sub-steps (1d–1g).
 
-**Context-heaviness advisory:** If the parsed output's top-level `contextAdvisory` field is a non-empty string, print it verbatim before continuing. The advisory recommends `/compact` and notes that pipeline state is preserved across compaction (PreCompact + SessionStart hooks). Sourced from `$TMPDIR/sdlc-context-stats.json`, written by the `UserPromptSubmit` hook (`hooks/context-stats.js`); helper at `scripts/lib/context-advisory.js`. When `contextAdvisory` is `null`, emit nothing.
+**Context-heaviness advisory:** If the parsed output's top-level `contextAdvisory` field is a non-empty string, print it verbatim before continuing. The advisory recommends `/compact` and notes that pipeline state is preserved across compaction (PreCompact + SessionStart hooks). Sourced from `$TMPDIR/sdlc-context-stats.json`, intended to be written by a `UserPromptSubmit` hook at `hooks/context-stats.js` — that hook **does not exist and is not registered in `hooks.json`**, so the sidecar is never written today and `contextAdvisory` is always `null` in practice. Reader helper at `scripts/lib/context-advisory.js`. When `contextAdvisory` is `null`, emit nothing.
 
 **Gitignore warning:** If `context.sdlcGitignored` is `false` in the output, print:
 ```
