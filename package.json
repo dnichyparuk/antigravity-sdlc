@@ -1,0 +1,15 @@
+{
+  "name": "lift-sdlc",
+  "version": "0.21.0",
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test 'scripts/**/*.test.js' 'skills/**/*.test.js'",
+    "lint": "eslint --config scripts/.eslintrc.json scripts skills"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.1"
+  }
+}

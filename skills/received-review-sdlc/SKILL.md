@@ -20,10 +20,10 @@ the proposed action plan.
 ## Context Optimization Constraints
 
 To prevent context bloat and token exhaustion:
-1. **Targeted File Reads (R4):** Avoid reading entire large codebase files directly into memory. When gathering context, use `<PLUGIN_ROOT>/skills/plan-sdlc/scripts/outline_file.sh <file>` to extract file structure (classes, interfaces, functions) instead of using the `view_file` tool on massive files.
+1. **Targeted File Reads (R4):** Avoid reading entire large codebase files directly into memory. When gathering context, use `node "<PLUGIN_ROOT>/scripts/util/outline-file.js" <file>` to extract file structure (classes, interfaces, functions) instead of using the `view_file` tool on massive files.
 2. **Enforced Parallelism (R5):** If you need to execute multiple exploration commands, process multiple review items, or read multiple files, you MUST batch them in a single JSON tool call array rather than waiting for each to finish sequentially.
 3. **Strict Thought Protocol (R6):** Do not return an empty chat response just to explain intermediate thoughts or internal self-critiques. All internal reasoning must remain in the `thought` block. You must execute the next logical step immediately.
-4. **Truncated Test Outputs (R1):** When verifying changes (compiling, tests, linting) or running package manager commands (e.g., npm, pnpm, pnpm build, yarn), ALWAYS use the truncated wrapper script: `<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/run_truncated.sh "<command>"`.
+4. **Truncated Test Outputs (R1):** When verifying changes (compiling, tests, linting) or running package manager commands (e.g., npm, pnpm, pnpm build, yarn), ALWAYS use the truncated runner: `node "<PLUGIN_ROOT>/scripts/util/run-truncated.js" "<command>"`.
 
 ## Configuration
 
@@ -135,7 +135,7 @@ If the system context contains "Plan mode is active":
 When a PR number or URL is provided (via arguments or user input), run the prepare script to pre-compute review thread state:
 
 ```shell
-<PLUGIN_ROOT>/skills/received-review-sdlc/scripts/prepare.sh
+node "<PLUGIN_ROOT>/scripts/skill/received-review.js" --output-file $ARGUMENTS
 ```
 
 > **Contract (Input/Output):**
@@ -203,7 +203,7 @@ Only proceed to Step 3 after all items are understood.
 
 For each feedback item, gather context beyond the immediate change diff:
 
-1. **Read the referenced code** — understand what the code actually does. **CRITICAL:** Use `<PLUGIN_ROOT>/skills/plan-sdlc/scripts/outline_file.sh <file>` or dispatch a subagent instead of natively reading large files.
+1. **Read the referenced code** — understand what the code actually does. **CRITICAL:** Use `node "<PLUGIN_ROOT>/scripts/util/outline-file.js" <file>` or dispatch a subagent instead of natively reading large files.
 2. **Trace callers and dependents** — use LSP references or grep to find who calls the changed code, what imports it, and what would be affected by the suggested change
 3. **Check architectural context** — read related modules, interfaces, and tests to understand the design intent behind the current implementation
 4. **Evaluate ripple effects** — determine whether the suggested change would break or improve behavior beyond the immediate diff
@@ -420,7 +420,7 @@ Post responses to PR threads, then implement accepted code changes.
 2. Simple fixes (typos, imports, naming)
 3. Complex fixes (refactoring, logic changes)
 
-For each change: make the edit, verify it compiles/passes tests (including running npm, pnpm, pnpm build, or yarn commands) via `<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/run_truncated.sh "<command>"`, then move to the next.
+For each change: make the edit, verify it compiles/passes tests (including running npm, pnpm, pnpm build, or yarn commands) via `node "<PLUGIN_ROOT>/scripts/util/run-truncated.js" "<command>"`, then move to the next.
 Do NOT batch changes across items.
 
 **Items marked "disagree" or "needs discussion":** Do NOT implement — await reviewer or
@@ -540,7 +540,7 @@ Step 11.6 — meta-analyze-findings: completed | dispatched=<N> deferred=<N> sup
 Before any `gh api` reply is posted, validate every URL embedded in every drafted reply body via the shared link validator. Concatenate all reply bodies (one per line) and feed them to the validator on stdin. The script auto-derives `expectedRepo` from `parseRemoteOwner(cwd)` and `jiraSite` from `~/.sdlc-cache/jira/` — the skill MUST NOT construct ctx JSON.
 
 ```shell
-<PLUGIN_ROOT>/skills/received-review-sdlc/scripts/validate_links.sh
+node "<PLUGIN_ROOT>/scripts/util/received-review-validate-links.js"
 ```
 
 > **Contract (Input/Output):**

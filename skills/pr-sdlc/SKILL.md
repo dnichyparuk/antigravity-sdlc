@@ -96,13 +96,16 @@ If no tests added, explain why.]
 
 ### Step 0: Resolve and Run skill/pr.js
 
-> **VERBATIM** — Execute this script directly using its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict script location pattern: `<PLUGIN_ROOT>/skills/<skill-name>/scripts/<script-name>.sh`). Do NOT prepend `bash` or `sh`. Do not modify, rephrase, or simplify the commands.
+> **VERBATIM** — Execute this command directly with `node` and the absolute plugin path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict CLI location pattern: `<PLUGIN_ROOT>/scripts/<skill|util|lib>/<script-name>.js`). Do not modify, rephrase, or simplify the flags.
 
 ```shell
-<PLUGIN_ROOT>/skills/pr-sdlc/scripts/prepare.sh
+node "<PLUGIN_ROOT>/scripts/skill/pr.js" --output-file $ARGUMENTS
 ```
+> **Contract (Input/Output):**
+> - **Input**: `$ARGUMENTS` (the skill's own arguments), forwarded verbatim.
+> - **Output**: Prints the path of a temp file holding the PR context JSON on stdout. Its exit code is `EXIT_CODE`.
 
-Read and parse `PR_CONTEXT_FILE` as `PR_CONTEXT_JSON`. The `trap` above guarantees cleanup on any exit path — do not add scattered `rm -f` calls in success/cancel branches.
+Capture the printed path as `PR_CONTEXT_FILE` and the command's exit status as `EXIT_CODE`. Read and parse `PR_CONTEXT_FILE` as `PR_CONTEXT_JSON`. The `trap` above guarantees cleanup on any exit path — do not add scattered `rm -f` calls in success/cancel branches.
 
 **On non-zero `EXIT_CODE`:**
 
@@ -425,7 +428,7 @@ Loop until explicit `yes` or `cancel`.
 **Pre-execution title pattern validation:** Before executing `gh pr create` or `gh pr edit`, if `prConfig` is non-null and `prConfig.titlePattern` is set, validate the title against the pattern:
 
 ```shell
-<PLUGIN_ROOT>/skills/pr-sdlc/scripts/validate_title.sh "$title" "$titlePattern" "$titlePatternError"
+node "<PLUGIN_ROOT>/scripts/util/validate-pr-title.js" "$title" "$titlePattern" "$titlePatternError"
 ```
 
 On failure:
@@ -439,11 +442,12 @@ On success:
 **Link verification (issue #198, implements spec R15) — HARD GATE:** Before executing `gh pr create` or `gh pr edit`, validate every URL embedded in the final PR body via `scripts/skill/pr.js --validate-body`. The script reads the body from stdin and derives the expected GitHub repo identity (`parseRemoteOwner(projectRoot)`) deterministically — the skill MUST NOT construct ctx JSON.
 
 ```shell
-<PLUGIN_ROOT>/skills/pr-sdlc/scripts/validate_body.sh
+printf '%s' "$body" | node "<PLUGIN_ROOT>/scripts/skill/pr.js" --validate-body
+LINK_EXIT=$?
 ```
 
 On non-zero exit (`LINK_EXIT != 0`):
-- The script has already printed the violation list to stderr (URL, line, reason code, observed/expected detail)
+- The command has already printed the violation list to stderr (URL, line, reason code, observed/expected detail)
 - Do NOT execute `gh pr create` or `gh pr edit`
 - Surface the violation list verbatim to the user
 - Stop. Do not retry. Do not edit URLs without user input. Do not bypass.
@@ -460,7 +464,7 @@ gh label create "<name>" --description "Auto-created by pr-sdlc" --color "c5def5
 
 This is idempotent — the command succeeds silently if the label already exists. This ensures forced labels work in any repository where the plugin is installed, not just repos where labels were pre-created.
 
-**Create mode:**
+**Create mode:** issue the create through the `create-pr.js` wrapper described below — it is a transparent passthrough to `gh pr create` that only adds the post-failure recovery step:
 
 ```bash
 gh pr create --title "<title>" --body "<body>" [--draft] [--label "<l1>" --label "<l2>"]
@@ -468,11 +472,13 @@ gh pr create --title "<title>" --body "<body>" [--draft] [--label "<l1>" --label
 
 If no labels were approved, omit the `--label` flags entirely.
 
-**Post-failure account-switch recovery (implements spec E7, issue #184):** If `gh pr create` exits non-zero, capture stderr to a temp file and invoke the recovery helper exactly once:
+**Post-failure account-switch recovery (implements spec E7, issue #184):** Run the create step through the `create-pr.js` wrapper, which forwards every argument verbatim to `gh pr create` and — only if `gh` exits non-zero — captures its stderr to a temp file and invokes the recovery helper exactly once, printing the recovery verdict JSON on stdout:
 
 ```shell
-<PLUGIN_ROOT>/skills/pr-sdlc/scripts/create_pr.sh
+RECOVER_JSON=$(node "<PLUGIN_ROOT>/scripts/util/create-pr.js" --title "<title>" --body "<body>" [--draft] [--label "<l1>" --label "<l2>"])
 ```
+
+The wrapper exits 0 when `gh pr create` succeeded (nothing is printed), forwards `gh`'s own non-zero exit code after the recovery attempt, and exits 2 if the recovery helper could not be located.
 
 Parse `RECOVER_JSON`. Branches:
 

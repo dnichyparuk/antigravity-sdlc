@@ -68,10 +68,10 @@ Wait for the subagent's JSON response. If `status` is "failed", present the issu
 
 **Guardrail loading:** Load execution guardrails from project config:
 
-> **VERBATIM** — Execute this script directly using its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict script location pattern: `<PLUGIN_ROOT>/skills/<skill-name>/scripts/<script-name>.sh`). Do NOT prepend `bash` or `sh`.
+> **VERBATIM** — Run this command exactly as written, replacing `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict script location pattern: `node "<PLUGIN_ROOT>/scripts/<group>/<script-name>.js"` — the scripts are Node CLI files invoked with `node`. Do not modify, rephrase, or simplify the commands.
 
 ```shell
-<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/context_advisory.sh
+node "<PLUGIN_ROOT>/scripts/util/execute-context-advisory.js"
 ```
 
 Parse the JSON output. If the array is non-empty, store as `activeGuardrails` and print: "Loaded N execution guardrails." If empty or config not found: "No execution guardrails configured." This is backward compatible — no guardrails means no change in behavior.
@@ -86,7 +86,7 @@ Note: this reads `execute.guardrails` (runtime enforcement), not `plan.guardrail
   1. Find the most recent state file for the current branch in `<main-worktree>/.sdlc/execution/`. If none found, warn: "No state file found for branch `<branch>`. Starting fresh." and proceed to plan loading below.
   2. Read `./resources/state-format.md` for the schema reference.
   3. Read the state file using `node "$STATE_SCRIPT" read` (locate `state/execute.js` as described in the State persistence section). Load `planPath` and read the plan file. If `planPath` is null (plan was from conversation context), use AskUserQuestion to request the plan file path.
-  4. Compute the SHA-256 hash of the plan content using the dedicated script: `<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/plan_hash.sh <plan-path>`, and compare against `planHash`. If mismatch, use AskUserQuestion:
+  4. Compute the SHA-256 hash of the plan content using the dedicated script: `node "<PLUGIN_ROOT>/scripts/util/plan-hash.js" <plan-path>`, and compare against `planHash`. If mismatch, use AskUserQuestion:
      > Plan content has changed since execution started. Resume with the existing wave structure, or restart from scratch?
      Options: **resume** | **restart**
      If "restart", delete the state file and proceed to plan loading below.
@@ -168,7 +168,7 @@ When ship-sdlc invokes execute-plan-sdlc inside the ship pipeline, `--branch` is
 
    - Execute the setup script to perform the branch checkouts or worktree creation:
      ```shell
-     SETUP_JSON=$(<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/workspace_setup.sh \
+     SETUP_JSON=$(node "<PLUGIN_ROOT>/scripts/util/execute-workspace-setup.js" \
        --workspace-flag "<workspace-mode>" \
        --logical-type "<logical-type>" \
        --derived-slug "<derived-slug>" \
@@ -400,10 +400,10 @@ The wave-runner Agent handles in-wave per-task fan-out internally — it dispatc
 
 **5c. Collect and verify** — After the wave-runner Agent returns:
 
-0. **Parse `WAVE_SUMMARY` via `lib/wave-summary.js` (R-BOUNDED-RETURN, R-CONTEXT_OVERFLOW, #432):** Call `parseWaveSummary(text, dispatchedIds)` in a brief inline Node.js block, where `text` is the wave-runner's full response and `dispatchedIds` is the array of task IDs sent in the manifest:
+0. **Parse `WAVE_SUMMARY` via `lib/wave-summary.js` (R-BOUNDED-RETURN, R-CONTEXT_OVERFLOW, #432):** Run the `parse-wave.js` CLI, where the text on stdin is the wave-runner's full response and `--dispatched-ids` carries the array of task IDs sent in the manifest:
 
    ```shell
-<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/parse_wave.sh
+node "<PLUGIN_ROOT>/scripts/util/parse-wave.js" --dispatched-ids '<json-array-of-dispatched-task-ids>' < "$TMPFILE"
 ```
 
 > **Contract (Input/Output):**
@@ -412,7 +412,7 @@ The wave-runner Agent handles in-wave per-task fan-out internally — it dispatc
 
    Read `schemaOk`, `missingIds`, `extraIds`, `violations`, and `parsed` from the result.
 
-   > **Note:** The `<<< "$WAVE_RUNNER_OUTPUT"` here-string is pseudocode illustrating the intent. In practice, write `$WAVE_RUNNER_OUTPUT` to a temp file and pass it via stdin redirect (`<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/parse_wave.sh < "$TMPFILE"`), or inline the content via `process.env` — shell here-strings have byte limits and can silently truncate large wave outputs.
+   > **Note:** The dispatched task IDs are passed as the explicit `--dispatched-ids '<json-array>'` flag (not an ambient environment variable), and the wave-runner's full response arrives on stdin. Always write `$WAVE_RUNNER_OUTPUT` to a temp file and pass it via the stdin redirect (`node "<PLUGIN_ROOT>/scripts/util/parse-wave.js" --dispatched-ids '<json-array>' < "$TMPFILE"`) — do NOT use a `<<< "$WAVE_RUNNER_OUTPUT"` here-string, because shell here-strings have byte limits and can silently truncate large wave outputs.
 
    - If `missingIds.length > 0` → **CONTEXT_OVERFLOW** (R-CONTEXT_OVERFLOW, #432): the wave-runner's context was exhausted before it could report all dispatched tasks. This is the sole discriminant — a schema-valid partial response (where `schemaOk` is true but `missingIds` is non-empty) also triggers this path, because absent IDs mean unconfirmed tasks regardless of schema validity. Invoke the auto-split-and-retry flow:
 
@@ -446,7 +446,7 @@ The wave-runner Agent handles in-wave per-task fan-out internally — it dispatc
 
 3. **Conflict detection:** Check `git diff --stat` for files touched by multiple tasks in this wave. If found, treat as a file conflict.
 
-4. **Verification suite:** Run verification commands specified in the plan (tests, build, lint). **CRITICAL:** Always run tests, builds, linters, and package manager commands (such as npm, pnpm, pnpm build, or yarn) via the truncated wrapper script to prevent context bloat: `<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/run_truncated.sh "<command>"`.
+4. **Verification suite:** Run verification commands specified in the plan (tests, build, lint). **CRITICAL:** Always run tests, builds, linters, and package manager commands (such as npm, pnpm, pnpm build, or yarn) via the truncated wrapper script to prevent context bloat: `node "<PLUGIN_ROOT>/scripts/util/run-truncated.js" "<command>"`.
 
 5. **Task status handling** (from `WAVE_SUMMARY.tasks[].status`):
    - STATUS: DONE → proceed normally
@@ -535,7 +535,7 @@ When `commitWaves === true`:
      ```
    - Persist via the new state subcommand:
      ```bash
-     <PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/state_wrapper.sh wave-committed --branch <slug> --wave <N> --sha "$committedSha"
+     node "<PLUGIN_ROOT>/scripts/state/execute.js" wave-committed --branch <slug> --wave <N> --sha "$committedSha"
      ```
    - For the soft-success path above, omit `--sha` (or pass `--sha ""`): the subcommand persists `committedSha: null`.
 
@@ -552,35 +552,35 @@ Proceeding to Wave N+1 (N tasks)
 
 The progress report is rendered from `WAVE_SUMMARY` payload — per-task names, statuses, and `filesTouched` (R-FILESTOUCHED) from the summary. State writes happen after wave-runner returns and main-context verification completes.
 
-**State persistence:** After each wave completes, update the execution state using the state wrapper script: `<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/state_wrapper.sh`.
+**State persistence:** After each wave completes, update the execution state using the state CLI: `node "<PLUGIN_ROOT>/scripts/state/execute.js"`. Elsewhere in this document `$STATE_SCRIPT` is shorthand for that same path — set `STATE_SCRIPT="<PLUGIN_ROOT>/scripts/state/execute.js"` once and reuse it.
 
-On the very first wave dispatch, compute the SHA-256 hash of the plan using `<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/plan_hash.sh <plan-path>` and initialize the state file:
+On the very first wave dispatch, compute the SHA-256 hash of the plan using `node "<PLUGIN_ROOT>/scripts/util/plan-hash.js" <plan-path>` and initialize the state file:
 ```bash
-<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/state_wrapper.sh init --branch <branch> --quality <X> --total-tasks <N> --planned-task-ids '<json-array-of-all-task-ids>' --plan-path <plan-path> --plan-hash <plan-hash>
+node "<PLUGIN_ROOT>/scripts/state/execute.js" init --branch <branch> --quality <X> --total-tasks <N> --planned-task-ids '<json-array-of-all-task-ids>' --plan-path <plan-path> --plan-hash <plan-hash>
 ```
 Where `<json-array-of-all-task-ids>` is a JSON array of every task ID from the plan (e.g. `'["1","2","3"]'`), parsed from the plan in Step 1. This seeds `plannedTaskIds` in the state file so the `verify-completeness` gate (Step 5f) can cross-check all planned IDs against accounted task records.
 
-Before each wave: `<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/state_wrapper.sh wave-start --wave <N>`
-After each task (sourced from `WAVE_SUMMARY.tasks[]`): `<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/state_wrapper.sh task-done --wave <N> --task <id> --name "<name>" --complexity <c> --risk <r> --files-changed '<json>'` where `<json>` is `WAVE_SUMMARY.tasks[].filesTouched` (R-FILESTOUCHED) (or `task-fail` when `task.status === 'FAILED'`)
-After each wave: `<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/state_wrapper.sh wave-done --wave <N>` (or `wave-fail` when `WAVE_SUMMARY.status === 'failed'`)
-Update context: `<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/state_wrapper.sh context --data '<json>'`
+Before each wave: `node "<PLUGIN_ROOT>/scripts/state/execute.js" wave-start --wave <N>`
+After each task (sourced from `WAVE_SUMMARY.tasks[]`): `node "<PLUGIN_ROOT>/scripts/state/execute.js" task-done --wave <N> --task <id> --name "<name>" --complexity <c> --risk <r> --files-changed '<json>'` where `<json>` is `WAVE_SUMMARY.tasks[].filesTouched` (R-FILESTOUCHED) (or `task-fail` when `task.status === 'FAILED'`)
+After each wave: `node "<PLUGIN_ROOT>/scripts/state/execute.js" wave-done --wave <N>` (or `wave-fail` when `WAVE_SUMMARY.status === 'failed'`)
+Update context: `node "<PLUGIN_ROOT>/scripts/state/execute.js" context --data '<json>'`
 
 The `state/execute.js` CLI surface is unchanged — only the SKILL.md call-site shape shifts (writes happen after wave-runner returns, driven by `WAVE_SUMMARY` data, but with the same arguments).
 
-On successful completion: `<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/state_wrapper.sh cleanup`
+On successful completion: `node "<PLUGIN_ROOT>/scripts/state/execute.js" cleanup`
 
 **5d-bis — OpenSpec task flip (implements R37, R39, I13, E14 — Fixes #414).** After `task-done` state writes for this wave, before the `wave-done` state write, flip OpenSpec checkboxes for refs whose plan-task siblings have all reached DONE / DONE_WITH_CONCERNS. This step runs in execute-plan-sdlc main context ONLY — never from inside the wave-runner Agent or per-task sub-agents (cite R37). When `refToTaskIds` is empty (plan has no `openspec-task` blocks), skip this step entirely (zero new behavior).
 
 Algorithm:
 
-1. Build `completedOpenspecTaskIds`: the cumulative set of plan-task IDs (across all waves so far) whose `status` in the state file is `completed`. Source this from `state/execute.js read` output (called using `<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/state_wrapper.sh read`) so it survives `--resume` — do NOT cache in conversation memory only.
+1. Build `completedOpenspecTaskIds`: the cumulative set of plan-task IDs (across all waves so far) whose `status` in the state file is `completed`. Source this from `state/execute.js read` output (called using `node "<PLUGIN_ROOT>/scripts/state/execute.js" read`) so it survives `--resume` — do NOT cache in conversation memory only.
 2. For each `(ref, siblings)` in `refToTaskIds`:
    - Skip if `ref` ∈ `flippedRefs` (already attempted this run — idempotent).
    - Skip if `siblings` is NOT a subset of `completedOpenspecTaskIds` (at least one sibling is still pending, failed, or blocked — leaves the OpenSpec checkbox `- [ ]` per R37).
    - Otherwise, look up the `openspec-task` block for any one sibling (all siblings share `change`/`ref`/`line`/`title`) and call `markTaskDone` via the wrapper script:
 
      ```shell
-     RESULT_JSON=$(<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/openspec_wrapper.sh \
+     RESULT_JSON=$(node "<PLUGIN_ROOT>/scripts/util/openspec-task-info.js" \
        --change "<change>" \
        --ref "<ref>" \
        [--line "<line>"] \
@@ -867,19 +867,26 @@ If `openspecSpecs` was loaded in Step 1 (the plan was OpenSpec-sourced), also su
 1. Extract the change name from the plan header's `**Source:**` field (the `openspec/changes/<name>/` path).
 2. Call `lib/openspec.js::validateChangeStrict(projectRoot, name)` via Bash:
    ```shell
-   <PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/openspec_validate.sh '<name>'
+   node "<PLUGIN_ROOT>/scripts/util/openspec-validate.js" '<name>'
    ```
+   > **Contract (Input/Output):**
+   > - **Input**: the change name as a single positional argument.
+   > - **Output**: prints the path of a temp JSON file on stdout — **not** the JSON itself. Read that path, `JSON.parse` the file, and take `{ ok, stdout, stderr, cliAvailable, errors }` from it. Exit 0 when `ok` is true, 1 when validation failed, 2 on an unexpected crash.
 3. **If `cliAvailable === false`:** emit the existing static advisory (no fabricated validation claim):
    - `/opsx:verify` — validate implementation completeness against the spec
    - `/opsx:archive` — merge delta specs into main specs after verification passes
 4. **If `ok === true`:** apply the tasks.md coverage gate (implements R38 — Fixes #414) before emitting the suggestion:
-   - Re-parse `openspec/changes/<name>/tasks.md` via the wrapper script:
+   - Re-parse `openspec/changes/<name>/tasks.md` via the tasks CLI:
 
      ```shell
-     TASKS_JSON=$(<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/openspec_tasks_wrapper.sh --name "<name>")
+     TASKS_JSON=$(node "<PLUGIN_ROOT>/scripts/util/openspec-tasks.js" --change "<name>")
      ```
 
-     Build `unflippedTitles` from entries where `done === false`.
+     > **Contract (Input/Output):**
+     > - **Input**: `--change "<name>"` (the flag is `--change`; `--name` is kept as a backward-compatible alias).
+     > - **Output**: `TASKS_JSON` is an **envelope object**, not a bare array — `{"status":"success","tasks":[{ref,line,title,indent,done}, ...]}` on exit 0, or `{"status":"error","error":"<message>"}` on exit 1. Always read the task list from `TASKS_JSON.tasks`.
+
+     Build `unflippedTitles` from the entries of `TASKS_JSON.tasks` where `done === false`.
    - Parse the plan file's `## Out-of-scope OpenSpec tasks` section (a flat bullet list of `- <title> — <rationale>` items) into `outOfScopeTitles: Set<string>` (case-sensitive title match).
    - Compute `undocumentedUnflipped = unflippedTitles.filter(t => !outOfScopeTitles.has(t))`.
    - If `undocumentedUnflipped.length === 0`: emit the validated suggestion as before:

@@ -229,7 +229,7 @@ conditionally after Step 2 classifies the operation type.
    - Call mcp__atlassian__lookupJiraAccountId({ cloudId, query: "<name or email>" })
    - If multiple results: show all and ask user to confirm which one
    - Once confirmed: save to cache via:
-     echo '{"<displayName>":"<accountId>"}' | node "$SCRIPT" --project "$KEY" --save-field userMappings
+     echo '{"<displayName>":"<accountId>"}' | node "<PLUGIN_ROOT>/scripts/skill/jira.js" --project "$KEY" --save-field userMappings
 
 3. Call mcp__atlassian__editJiraIssue({
      cloudId, issueKey,

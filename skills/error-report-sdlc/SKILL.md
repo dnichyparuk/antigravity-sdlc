@@ -60,14 +60,25 @@ required before any further work, including running the prepare script.
 
 ### Step 3 — Run the Prepare Script (main context)
 
-> **VERBATIM** — Execute this script directly using its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict script location pattern: `<PLUGIN_ROOT>/skills/<skill-name>/scripts/<script-name>.sh`). Do NOT prepend `bash` or `sh`. Do not modify, rephrase, or simplify the commands.
+> **VERBATIM** — Execute this command directly with `node` and the absolute plugin path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict CLI location pattern: `<PLUGIN_ROOT>/scripts/<skill|util|lib>/<script-name>.js`). Do not modify, rephrase, or simplify the flags.
 
 ```shell
-<PLUGIN_ROOT>/skills/error-report-sdlc/scripts/prepare_report.sh
+ERROR_CONTEXT_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/error-report-prepare.js" \
+  --skill "$SKILL_NAME" \
+  --step "$STEP_NAME" \
+  --operation "$OPERATION" \
+  --error-text "$ERROR_TEXT" \
+  --exit-or-http-code "$EXIT_OR_HTTP_CODE" \
+  --error-type "$ERROR_TYPE" \
+  --user-intent "$USER_INTENT" \
+  --args-string "$ARGS_STRING" \
+  --suggested-investigation "$SUGGESTED_INVESTIGATION" \
+  --output-file)
+EXIT_CODE=$?
 ```
 > **Contract (Input/Output):**
-> - **Input**: Error text and skill context.
-> - **Output**: Prints JSON structure for GitHub issue submission.
+> - **Input**: Error text and skill context, passed as the flags above.
+> - **Output**: Prints the path of a temp file holding the JSON structure for GitHub issue submission; captured here as `ERROR_CONTEXT_FILE`, with the command's exit status as `EXIT_CODE`.
 
 Substitute the shell variables with the values supplied by the calling skill. Optional
 fields (`exitOrHttpCode`, `errorType`, `userIntent`, `argsString`,

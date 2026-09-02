@@ -35,16 +35,16 @@ If the system context contains "Plan mode is active":
 
 ### Step 0: Resolve and Run skill/commit.js
 
-> **VERBATIM** — Execute this script directly using its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict script location pattern: `<PLUGIN_ROOT>/skills/<skill-name>/scripts/<script-name>.sh`). Do NOT prepend `bash` or `sh`. Do not modify, rephrase, or simplify the commands.
+> **VERBATIM** — Execute this command directly with `node` and the absolute plugin path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict CLI location pattern: `<PLUGIN_ROOT>/scripts/<skill|util|lib>/<script-name>.js`). Do not modify, rephrase, or simplify the flags.
 
 ```shell
-<PLUGIN_ROOT>/skills/commit-sdlc/scripts/prepare.sh
+node "<PLUGIN_ROOT>/scripts/skill/commit.js" --output-file $ARGUMENTS
 ```
 > **Contract (Input/Output):**
-> - **Input**: None.
-> - **Output**: Prints JSON manifest of staged diffs and commit history.
+> - **Input**: `$ARGUMENTS` (the skill's own arguments), forwarded verbatim.
+> - **Output**: Prints the path of a JSON manifest of staged diffs and commit history on stdout. Its exit code is `EXIT_CODE`.
 
-Read and parse `COMMIT_CONTEXT_FILE` as `COMMIT_CONTEXT_JSON`.
+Capture the printed path as `COMMIT_CONTEXT_FILE` and the command's exit status as `EXIT_CODE`. Read and parse `COMMIT_CONTEXT_FILE` as `COMMIT_CONTEXT_JSON`.
 
 **On non-zero `EXIT_CODE`:**
 
@@ -195,7 +195,7 @@ Show `Amend:` instead of `Commit:` heading when `flags.amend` is true.
 0. **Subject pattern gate (hard gate):** If `commitConfig` is non-null and `commitConfig.subjectPattern` is set, validate the subject line before proceeding:
 
    ```shell
-   <PLUGIN_ROOT>/skills/commit-sdlc/scripts/validate_subject.sh "<subjectPattern>" "<subject line>"
+   node "<PLUGIN_ROOT>/scripts/util/validate-commit-subject.js" "<subjectPattern>" "<subject line>"
    ```
    > **Contract (Input/Output):**
    > - **Input**: `"<pattern>"` and `"<subject>"`.
@@ -211,7 +211,7 @@ Show `Amend:` instead of `Commit:` heading when `flags.amend` is true.
 1. **Link verification (issue #198, R12) — HARD GATE.** Before `git commit`, validate every URL embedded in the commit message body via the shared link validator. The script reads the body from stdin and auto-derives `expectedRepo` from `parseRemoteOwner(cwd)` and `jiraSite` from `~/.sdlc-cache/jira/` — the skill MUST NOT construct ctx JSON.
 
    ```shell
-<PLUGIN_ROOT>/skills/commit-sdlc/scripts/validate_links.sh
+node "<PLUGIN_ROOT>/scripts/util/commit-validate-links.js"
 ```
 > **Contract (Input/Output):**
 > - **Input**: Commit body via stdin, or via `--file <path>` argument.

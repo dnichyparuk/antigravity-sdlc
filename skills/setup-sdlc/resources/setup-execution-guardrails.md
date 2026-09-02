@@ -15,7 +15,7 @@ Sub-flow of `/setup-sdlc --execution-guardrails`. Runs skill/guardrails.js with 
 Run skill/guardrails.js:
 
 ```shell
-<PLUGIN_ROOT>/skills/setup-sdlc/scripts/setup-execution-guardrails_prepare.sh
+node "<PLUGIN_ROOT>/scripts/skill/guardrails.js" --output-file --project-root . --target execute --mode {init|add} --json
 ```
 
 Replace `{init|add}` with `add` if `--add` was passed, otherwise `init`.
@@ -53,10 +53,10 @@ On **custom**: collect id (validate kebab-case pattern `^[a-z][a-z0-9]*(-[a-z0-9
 
 ### Step 3 (WRITE) — Write Config
 
-Write selected guardrails via inline Node.js using config library:
+Write selected guardrails via the config-writing CLI:
 
 ```shell
-<PLUGIN_ROOT>/skills/setup-sdlc/scripts/setup-execution-guardrails_write.sh
+node "<PLUGIN_ROOT>/scripts/util/setup-execution-guardrails-write.js" --section execute --value '<GUARDRAILS_JSON>'
 ```
 
 Replace `<GUARDRAILS_JSON>` with the JSON array of selected guardrails. In `--add` mode: prepend existing guardrails from the prepare output to the array.
@@ -64,7 +64,7 @@ Replace `<GUARDRAILS_JSON>` with the JSON array of selected guardrails. In `--ad
 ### Step 4 (VALIDATE) — Run Validation Script
 
 ```shell
-<PLUGIN_ROOT>/skills/setup-sdlc/scripts/setup-execution-guardrails_validate.sh
+node "<PLUGIN_ROOT>/scripts/ci/validate-guardrails.js" --project-root . --section execute --json
 ```
 
 Parse output. If `overall` is "pass", report success with count. If "fail", show errors and offer to fix.
@@ -72,7 +72,7 @@ Parse output. If `overall` is "pass", report success with count. If "fail", show
 ## Do Not
 
 - Run full-suite or wide-subset `promptfoo eval` automatically — single targeted test scoped to the change is allowed; tight-loop retries are not.
-- Write config files using Write or Edit tools directly — always use lib/config.js via inline Node.js
+- Write config files using Write or Edit tools directly — always go through `scripts/util/setup-execution-guardrails-write.js`, which wraps lib/config.js
 - Skip AskUserQuestion for user interaction
 - Scan the entire codebase — the prepare script handles scanning
 

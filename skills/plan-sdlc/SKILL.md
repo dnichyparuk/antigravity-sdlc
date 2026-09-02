@@ -15,7 +15,7 @@ Write an implementation plan from requirements, a spec, or a user description. P
 ## Context Optimization Constraints
 
 To prevent context bloat and token exhaustion:
-1. **Targeted File Reads (R4):** Avoid reading entire large codebase files directly into memory. When exploring the codebase, use `<PLUGIN_ROOT>/skills/plan-sdlc/scripts/outline_file.sh <file>` to extract file structure (classes, interfaces, functions) instead of using the `view_file` tool on massive files.
+1. **Targeted File Reads (R4):** Avoid reading entire large codebase files directly into memory. When exploring the codebase, use `node "<PLUGIN_ROOT>/scripts/util/outline-file.js" <file>` to extract file structure (classes, interfaces, functions) instead of using the `view_file` tool on massive files.
 2. **Enforced Parallelism (R5):** If you need to execute multiple exploration commands or read multiple files, you MUST batch them in a single JSON tool call array rather than waiting for each to finish sequentially.
 3. **Strict Thought Protocol (R6):** Do not return an empty chat response just to explain intermediate thoughts. All internal reasoning must remain in the `thought` block. You must execute the next logical step immediately.
 
@@ -88,16 +88,16 @@ To prevent context bloat and token exhaustion:
 
 **Context detection and guardrail loading (skill/plan.js):**
 
-> **VERBATIM** — Execute this script directly using its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict script location pattern: `<PLUGIN_ROOT>/skills/<skill-name>/scripts/<script-name>.sh`). Do NOT prepend `bash` or `sh`.
+> **VERBATIM** — Run this command exactly as written, invoking the script with `node` and its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict script location pattern: `<PLUGIN_ROOT>/scripts/<group>/<script-name>.js`, where `<group>` is one of `skill`, `util`, `lib`, `state`, or `ci`). There is no shell wrapper — always call `node` on the `.js` file directly.
 
 ```shell
-<PLUGIN_ROOT>/skills/plan-sdlc/scripts/prepare.sh
+node "<PLUGIN_ROOT>/scripts/skill/plan.js" --output-file
 ```
 > **Contract (Input/Output):**
 > - **Input**: None.
 > - **Output**: Prints JSON manifest of current branch state.
 
-If `--from-openspec <name>` was passed to plan-sdlc, include it in the node command: `node "$SCRIPT" --output-file --from-openspec <name>`.
+If `--from-openspec <name>` was passed to plan-sdlc, append it to the same command: `node "<PLUGIN_ROOT>/scripts/skill/plan.js" --output-file --from-openspec <name>`.
 
 If `EXIT_CODE` is non-zero, print the errors from the JSON output and stop. If `EXIT_CODE` is 0, read the JSON output file. Print context detection summary:
 ```
@@ -143,10 +143,10 @@ Naming convention: `YYYY-MM-DD-<feature-name>.md`. Create the directory if neede
 - **Consume-then-delete** — the Stop hook reads `planIntegrity` markers, evaluates the gates, then unlinks the marker regardless of outcome (single-shot semantics). Subsequent Stop events on the same branch fall through to the transcript-fallback path — this is correct R21 behavior.
 - **GC orphan sweep** — `ship-sdlc --gc` and `execute-plan-sdlc --gc` sweep stale `plan-*` markers (TTL-expired or branch-deleted) alongside `ship-*` and `execute-*` files; the JSON output includes a `plan` bucket alongside `ship` and `execute`.
 
-Each `--mark` block re-resolves `$SCRIPT` independently: SKILL.md bash blocks each run as a separate Bash tool invocation, so shell variables do NOT persist across blocks.
+Each `--mark` block is a self-contained `node` invocation that spells out the full `<PLUGIN_ROOT>` path: SKILL.md bash blocks each run as a separate Bash tool invocation, so shell variables do NOT persist across blocks. Marker writes are best-effort — swallow any error (`2>/dev/null || true`) so a failed marker never blocks plan creation.
 
 ```shell
-<PLUGIN_ROOT>/skills/plan-sdlc/scripts/mark_plan_file.sh
+node "<PLUGIN_ROOT>/scripts/skill/plan.js" --mark plan-file --path "<resolved-plan-path>" 2>/dev/null || true
 ```
 > **Contract (Input/Output):**
 > - **Input**: Plan file path.
@@ -210,7 +210,7 @@ fi
 Wait for answers before continuing.
 
 **Codebase exploration (skip for lightweight):** Use read-only tools (Glob, Grep, Read, LSP):
-- Relevant file structure and patterns in affected areas. **CRITICAL:** Use `<PLUGIN_ROOT>/skills/plan-sdlc/scripts/outline_file.sh <file>` to extract file outlines instead of natively reading large files.
+- Relevant file structure and patterns in affected areas. **CRITICAL:** Use `node "<PLUGIN_ROOT>/scripts/util/outline-file.js" <file>` to extract file outlines instead of natively reading large files.
 - Existing modules, interfaces, and types the feature touches
 - Testing patterns used in the project
 - Build/lint/test commands (from Makefile, package.json, or similar)
@@ -294,10 +294,10 @@ Lane 4 (dimension-coverage/G17) returns the G17 findings JSON — parse the `fin
 
 Note every issue from `allIssues`. Do NOT write to the plan file in this step.
 
-**JOIN barrier — `guardrailsEvaluated` (implements R20, R35, issue #285):** After the guardrail-compliance lane (lanes[3]) result is incorporated into the merged issue list, record the checkpoint. **Do NOT write this marker before lanes[3] returns.** Each `--mark` block re-resolves `$SCRIPT` because SKILL.md bash blocks do not share shell state.
+**JOIN barrier — `guardrailsEvaluated` (implements R20, R35, issue #285):** After the guardrail-compliance lane (lanes[3]) result is incorporated into the merged issue list, record the checkpoint. **Do NOT write this marker before lanes[3] returns.** Each `--mark` block spells out the full `<PLUGIN_ROOT>` path because SKILL.md bash blocks do not share shell state. Marker writes are best-effort — a failed marker must never block plan creation.
 
 ```shell
-<PLUGIN_ROOT>/skills/plan-sdlc/scripts/mark_guardrails.sh
+node "<PLUGIN_ROOT>/scripts/skill/plan.js" --mark guardrailsEvaluated 2>/dev/null || true
 ```
 > **Contract (Input/Output):**
 > - **Input**: Guardrails content via stdin.
@@ -306,7 +306,7 @@ Note every issue from `allIssues`. Do NOT write to the plan file in this step.
 **JOIN barrier — `critiqueRan` (implements R20, R35, issue #285):** After ALL five lanes have returned and the merged issue list is complete (including G17/lanes[4] findings parsed into `g17Findings`), record the checkpoint. **Do NOT write this marker until all five lanes have returned.** This extends the existing G17 join semantics to every lane.
 
 ```shell
-<PLUGIN_ROOT>/skills/plan-sdlc/scripts/mark_critique.sh
+node "<PLUGIN_ROOT>/scripts/skill/plan.js" --mark critiqueRan 2>/dev/null || true
 ```
 > **Contract (Input/Output):**
 > - **Input**: Critique text via stdin.
@@ -388,7 +388,7 @@ If this is the 3rd iteration, use AskUserQuestion to surface remaining issues in
 After the reviewer loop converges (or the user resolves remaining issues), validate every URL embedded in the finalized plan file via the shared link validator. The script reads the plan content from stdin and auto-derives `expectedRepo` from `parseRemoteOwner(cwd)` and `jiraSite` from `~/.sdlc-cache/jira/` — the skill MUST NOT construct ctx JSON.
 
 ```shell
-<PLUGIN_ROOT>/skills/plan-sdlc/scripts/validate_links.sh
+node "<PLUGIN_ROOT>/scripts/util/plan-validate-links.js"
 ```
 > **Contract (Input/Output):**
 > - **Input**: Text via stdin, or via `--file <path>` argument.
@@ -404,16 +404,16 @@ On zero exit, proceed to Step 7. `SDLC_LINKS_OFFLINE=1` skips network reachabili
 
 ## Step 7: Handoff
 
-**Context-heaviness advisory (implements R17):** Before printing either branch below, locate and run the advisory wrapper. If it prints text, prepend that text verbatim to the handoff menu (above the `ship` / `execute` / `done` lines). If it prints nothing, skip the prepend.
+**Context-heaviness advisory (implements R17):** Before printing either branch below, run the advisory script. If it prints text, prepend that text verbatim to the handoff menu (above the `ship` / `execute` / `done` lines). If it prints nothing, skip the prepend.
 
 ```shell
-<PLUGIN_ROOT>/skills/plan-sdlc/scripts/handoff_advisory.sh
+node "<PLUGIN_ROOT>/scripts/skill/plan-handoff-advisory.js"
 ```
 > **Contract (Input/Output):**
 > - **Input**: None.
 > - **Output**: Prints advisory text for downstream agent handoff.
 
-The wrapper reads `$TMPDIR/sdlc-context-stats.json` (written by the `UserPromptSubmit` hook `hooks/context-stats.js`) and emits a `/compact` advisory only when transcript ≥60% of model budget. Pipeline state is preserved across `/compact` (PreCompact + SessionStart hooks), so re-invoking after compaction is safe.
+The script reads `$TMPDIR/sdlc-context-stats.json` (written by the `UserPromptSubmit` hook `hooks/context-stats.js`) and emits a `/compact` advisory only when transcript ≥60% of model budget. Pipeline state is preserved across `/compact` (PreCompact + SessionStart hooks), so re-invoking after compaction is safe.
 
 **Plan mode:** Announce the plan path and propose execution. Prepend any advisory output from the wrapper above the `ship` / `execute` lines:
 
