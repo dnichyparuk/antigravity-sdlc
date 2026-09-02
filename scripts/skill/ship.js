@@ -37,10 +37,10 @@
 
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-const { spawnSync } = require('child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const { spawnSync } = require('node:child_process');
 const LIB = path.join(__dirname, '..', 'lib');
 
 const { getDiffStat, exec, checkGitState, detectBaseBranch, parseRemoteOwner, probeGhAuth, formatAccountMismatch, probeRepoAccess, formatAccessDenied } = require(path.join(LIB, 'git'));

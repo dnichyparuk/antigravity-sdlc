@@ -34,7 +34,7 @@
  *   process.exit(exitCode);
  */
 
-const fs = require('fs');
+const fs = require('node:fs');
 
 const { validateLinks, formatViolations } = require('./links');
 

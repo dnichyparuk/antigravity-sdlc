@@ -264,7 +264,7 @@ function convert(markdown) {
 // ---------------------------------------------------------------------------
 
 if (require.main === module) {
-  const { readFileSync } = require('fs');
+  const { readFileSync } = require('node:fs');
 
   // --file <path> for file-based invocation (used by test runner)
   const fileIdx = process.argv.indexOf('--file');

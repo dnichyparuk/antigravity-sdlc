@@ -26,7 +26,7 @@
  * Zero npm dependencies — Node.js built-ins only.
  */
 
-const fs = require('fs');
+const fs = require('node:fs');
 
 // Equivalent to grep -nE '^[[:space:]]*(export|import|class|def|function|struct|interface|type|enum|const|let|var)[[:space:]]+'
 // POSIX [[:space:]] == JS \s for the ASCII line content grep operates on.

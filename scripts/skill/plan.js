@@ -240,7 +240,7 @@ function resolveSkillTemplate(templateName) {
  * @returns {Array<{ name: string, subagentType: string, model: string, promptTemplatePath: string|null, gateIds: string[] }>}
  */
 function buildLanes(g17Dispatch, guardrails, projectRoot) {
-  const { validateAll } = require(require('path').join(__dirname, '..', 'lib', 'dimensions'));
+  const { validateAll } = require(require('node:path').join(__dirname, '..', 'lib', 'dimensions'));
   const hasDimensions = validateAll(projectRoot).dimensions.length > 0;
   const hasGuardrails = guardrails && guardrails.length > 0;
 
