@@ -195,7 +195,6 @@ function parseArgs(argv) {
       // boolean flag; consumed by writeOutput in scripts/lib/output.js
     } else if (a === '--expected-branch' && args[i + 1]) {
       // R-expected-branch (issues #347, #348, #349): validated after gitState is resolved
-      // eslint-disable-next-line no-use-before-define
       expectedBranch = args[++i];
     } else if (a.startsWith('-')) {
       warnings.push(`Unknown flag: ${a}`);

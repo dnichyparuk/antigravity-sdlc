@@ -1226,7 +1226,6 @@ function fetchPrReviewThreads(owner, repo, prNumber) {
   const threads = [];
   let cursor = null;
 
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     const cursorArg = cursor ? ` -F after=${cursor}` : '';
     const raw = exec(

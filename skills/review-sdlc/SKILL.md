@@ -20,13 +20,13 @@ Thin dispatcher — runs the prepare script, then delegates everything to the
 > **VERBATIM** — Run this command exactly as written, invoking the script with `node` and its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict script location pattern: `<PLUGIN_ROOT>/scripts/<group>/<script-name>.js`, where `<group>` is one of `skill`, `util`, `lib`, `state`, or `ci`). There is no shell wrapper — always call `node` on the `.js` file directly. Do not modify, rephrase, or simplify the commands.
 
 ```shell
-MANIFEST_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/review.js" --output-file $ARGUMENTS --json)
+MANIFEST_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/review.js" $ARGUMENTS --json)
 EXIT_CODE=$?
 ```
 
 > **Contract (Input/Output):**
-> - **Input**: ship-sdlc/user `$ARGUMENTS`, forwarded verbatim between the fixed `--output-file` and `--json` flags.
-> - **Output**: `--output-file` makes stdout **the manifest path and nothing else** — capture it directly into `MANIFEST_FILE` as above. There is no `MANIFEST_FILE: <path>` / `STATUS: <exit>` preamble to parse; `EXIT_CODE` is `skill/review.js`'s own exit status.
+> - **Input**: ship-sdlc/user `$ARGUMENTS`, forwarded verbatim before the fixed `--json` flag.
+> - **Output**: `skill/review.js` always writes its JSON payload to a temp file via `writeOutput()` and prints only that path to stdout — capture it directly into `MANIFEST_FILE` as above. There is no `MANIFEST_FILE: <path>` / `STATUS: <exit>` preamble to parse; `EXIT_CODE` is `skill/review.js`'s own exit status.
 
 **On non-zero `EXIT_CODE`:**
 

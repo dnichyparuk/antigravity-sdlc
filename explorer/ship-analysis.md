@@ -7,7 +7,7 @@ This document provides a comprehensive analysis of the execution pipeline, plann
 ## 📋 Phase 1: Pre-flight & Setup Checks
 
 ### 1. Step 0 — Plan Mode Check
-- Checks whether Antigravity is operating in read-only planning mode via [`plan_mode_check.sh`](../skills/ship-sdlc/scripts/plan_mode_check.sh).
+- Checks whether the system context contains the string "Plan mode is active" (inline check in `SKILL.md`, no wrapper script).
 - If planning mode is active, saves pipeline state to `.sdlc/execution/ship-*.json` and halts execution (since shipping requires git commits & PR writes).
 
 ### 2. Step 1 — Load Config, Parse Flags & Detect Context

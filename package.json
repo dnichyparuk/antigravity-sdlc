@@ -3,13 +3,15 @@
   "version": "0.21.0",
   "private": true,
   "engines": {
-    "node": ">=18"
+    "node": ">=20.19.0"
   },
   "scripts": {
     "test": "node --test 'scripts/**/*.test.js' 'skills/**/*.test.js'",
-    "lint": "eslint --config scripts/.eslintrc.json scripts skills"
+    "lint": "eslint scripts skills"
   },
   "devDependencies": {
-    "eslint": "^8.57.1"
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.9.1",
+    "globals": "^17.12.0"
   }
 }

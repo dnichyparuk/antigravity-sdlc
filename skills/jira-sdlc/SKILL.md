@@ -79,7 +79,7 @@ When `--check` is run without `--site` and the home-cache contains entries for t
 > **VERBATIM** — Execute this command directly with `node` and the absolute plugin path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict CLI location pattern: `<PLUGIN_ROOT>/scripts/<skill|util|lib>/<script-name>.js`). Do not modify, rephrase, or simplify the flags.
 
 ```shell
-JIRA_CONTEXT_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/jira.js" --output-file $ARGUMENTS --check)
+JIRA_CONTEXT_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/jira.js" $ARGUMENTS --check)
 EXIT_CODE=$?
 ```
 
@@ -114,7 +114,7 @@ If `--init-templates` flag is present:
 
 1. Run the init-templates script:
    ```bash
-   INIT_RESULT=$(node "<PLUGIN_ROOT>/scripts/skill/jira.js" --output-file --project "$PROJECT_KEY" --init-templates)
+   INIT_RESULT=$(node "<PLUGIN_ROOT>/scripts/skill/jira.js" --project "$PROJECT_KEY" --init-templates)
    # Append cleanup to the existing trap. Note: the JIRA_CONTEXT_FILE trap from
    # the entry section is still in effect; we extend it here so both files are
    # removed on EXIT/INT/TERM.

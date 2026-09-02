@@ -99,7 +99,7 @@ If no tests added, explain why.]
 > **VERBATIM** — Execute this command directly with `node` and the absolute plugin path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict CLI location pattern: `<PLUGIN_ROOT>/scripts/<skill|util|lib>/<script-name>.js`). Do not modify, rephrase, or simplify the flags.
 
 ```shell
-node "<PLUGIN_ROOT>/scripts/skill/pr.js" --output-file $ARGUMENTS
+node "<PLUGIN_ROOT>/scripts/skill/pr.js" $ARGUMENTS
 ```
 > **Contract (Input/Output):**
 > - **Input**: `$ARGUMENTS` (the skill's own arguments), forwarded verbatim.

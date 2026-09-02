@@ -53,7 +53,7 @@ Run `skill/setup.js` via Bash to get current state:
 > **VERBATIM** -- Run this bash block exactly as written, invoking the script with `node` and its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin; the strict script location pattern is `<PLUGIN_ROOT>/scripts/<group>/<script-name>.js`, where `<group>` is one of `skill`, `util`, `lib`, `state`, or `ci`). There is no shell wrapper — always call `node` on the `.js` file directly. Do not modify, rephrase, or simplify the commands.
 
 ```shell
-node "<PLUGIN_ROOT>/scripts/skill/setup.js" --output-file $ARGUMENTS
+node "<PLUGIN_ROOT>/scripts/skill/setup.js" $ARGUMENTS
 ```
 > **Contract (Input/Output):**
 > - **Input**: None.
@@ -194,7 +194,7 @@ Options:
 On **yes**: there is no separate migration command to run — standalone legacy-migration support was removed, and the two former shims (`migrate-config`, `migrate-jira`) were already no-ops. `lib/config.js::readLocalConfig` auto-migrates a v1 `.sdlc/local.json` on the next read, so re-run the Step 0 prepare command to trigger it and refresh state:
 
 ```shell
-node "<PLUGIN_ROOT>/scripts/skill/setup.js" --output-file $ARGUMENTS
+node "<PLUGIN_ROOT>/scripts/skill/setup.js" $ARGUMENTS
 ```
 > **Contract (Input/Output):**
 > - **Input**: None.
@@ -611,10 +611,10 @@ Display created files, check for errors. The `setup-init.js` script deterministi
 Re-run `skill/setup.js` to verify the config files were written correctly:
 
 ```bash
-VALIDATE_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/setup.js" --output-file)
+VALIDATE_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/setup.js")
 ```
 
-`--output-file` prints the manifest path on stdout — read `$VALIDATE_OUTPUT_FILE` and parse its JSON (do not redirect stdout into a file; that would capture the path, not the payload). Confirm:
+`skill/setup.js` always writes its JSON payload to a temp file via `writeOutput()` and prints only the manifest path on stdout — read `$VALIDATE_OUTPUT_FILE` and parse its JSON (do not redirect stdout into a file; that would capture the path, not the payload). Confirm:
 - `projectConfig.exists` is `true` and `projectConfig.sections` includes the sections just written
 - `localConfig.exists` is `true` (if review scope was configured)
 
