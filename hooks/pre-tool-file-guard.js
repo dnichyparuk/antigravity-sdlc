@@ -16,8 +16,9 @@ try {
     input = JSON.parse(raw);
   }
 } catch {
-  // Stdin unreadable or non-JSON — graceful degradation, allow the tool call
-  process.stdout.write(JSON.stringify({ decision: 'allow' }) + '\n');
+  // Stdin unreadable or non-JSON — fail closed, consistent with the other
+  // PreToolUse guard hooks (pre-tool-git-guard.js, pre-tool-validate.js).
+  process.stdout.write(JSON.stringify({ decision: 'deny', reason: 'guard hook could not parse tool-call input' }) + '\n');
   process.exit(0);
 }
 

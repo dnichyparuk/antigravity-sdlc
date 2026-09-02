@@ -16,8 +16,11 @@ try {
     input = JSON.parse(raw);
   }
 } catch {
-  // Stdin unreadable or non-JSON — graceful degradation, allow the tool call
-  process.stdout.write(JSON.stringify({ decision: 'allow' }) + '\n');
+  // Stdin unreadable or non-JSON — fail closed. An unparseable payload is
+  // exactly the anomalous condition this guard must not treat as
+  // "nothing to check here" (a malformed payload must not let
+  // `git push --force`/`reset --hard`/`checkout .`/`clean -f` through unchecked).
+  process.stdout.write(JSON.stringify({ decision: 'deny', reason: 'guard hook could not parse tool-call input' }) + '\n');
   process.exit(0);
 }
 
