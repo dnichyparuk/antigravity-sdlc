@@ -271,4 +271,8 @@ function main() {
   process.exit(issues.length === 0 ? 0 : 1);
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = { parseWorktreeList, slugify };
