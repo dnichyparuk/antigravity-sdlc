@@ -42,13 +42,7 @@ Options:
 On `yes` or `changelog`, write the version section to `.sdlc/config.json` using `writeSection` from lib/config.js with
 the content from `suggestedConfig` (adjusted if `changelog` was chosen).
 
-Then scaffold CI scripts and workflows using `scaffold-ci.js`:
-
-```shell
-node "<PLUGIN_ROOT>/scripts/util/scaffold-ci.js" --output-file
-```
-
-Run the scaffold (include `--changelog` when `config.changelog === true`):
+Then scaffold CI scripts and workflows using `scaffold-ci.js` (include `--changelog` when `config.changelog === true`):
 
 ```bash
 # Without changelog:

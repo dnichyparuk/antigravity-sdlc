@@ -285,21 +285,25 @@ function fetchPrReviews(owner, repo, prNumber) {
 
 /**
  * Fetch CI checks for a PR via `gh pr checks <n> --json`.
- * Returns a sentinel-empty array on any failure.
+ * Distinguishes between "no failing checks" and "`gh` unauthenticated" by
+ * probing gh auth status when the gh command returns no data.
  * Used by verify-pipeline polling (R42).
  *
  * @param {number|string} prNumber
- * @returns {Array<{name:string,state:string,bucket:string,workflow:string,event:string,startedAt:string,completedAt:string,link:string}>}
+ * @returns {{checks: Array<{name:string,state:string,bucket:string,workflow:string,event:string,startedAt:string,completedAt:string,link:string}>, ghAuthenticated: boolean, errorMessage: string|null}}
  */
 function fetchPrChecks(prNumber) {
-  if (prNumber === undefined || prNumber === null) return [];
+  if (prNumber === undefined || prNumber === null) return { checks: [], ghAuthenticated: true, errorMessage: null };
   const raw = exec(`gh pr checks ${prNumber} --json name,state,bucket,workflow,event,startedAt,completedAt,link`);
-  if (!raw) return [];
+  if (!raw) {
+    const auth = probeGhAuth();
+    return { checks: [], ghAuthenticated: auth.authenticated, errorMessage: auth.errorMessage };
+  }
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    return { checks: Array.isArray(parsed) ? parsed : [], ghAuthenticated: true, errorMessage: null };
   } catch (_) {
-    return [];
+    return { checks: [], ghAuthenticated: true, errorMessage: null };
   }
 }
 

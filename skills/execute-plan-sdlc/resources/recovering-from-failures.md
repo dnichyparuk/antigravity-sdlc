@@ -81,7 +81,7 @@ Max 1 retry.
 ### Unauthorized file modification
 Do NOT retry the agent without fixing the prompt first.
 1. Identify which unauthorized files were modified
-2. Revert them: `git checkout -- <file>`
+2. Revert each one: `node "<PLUGIN_ROOT>/scripts/util/rollback-stash.js" revert-file --path <file>` — returns `{"status": "reverted", "path": "<file>"}`, or `{"status": "failed", "path": "<file>", "message": "<diagnostic>"}` (exit 1)
 3. Re-examine the task — if it genuinely needs those files, update the allowed file list
 4. Re-dispatch with the corrected file list and a warning:
    ```
@@ -287,14 +287,13 @@ When a wave produces fundamentally broken output that cannot be recovered throug
 
 1. Stash all changes from the failed wave:
    ```bash
-   git stash push -m "failed-wave-N-$(date +%Y%m%d-%H%M%S)"
+   node "<PLUGIN_ROOT>/scripts/util/rollback-stash.js" stash
    ```
 
-2. Confirm the stash captured everything:
-   ```bash
-   git status
-   git stash list
-   ```
+2. The script pushes a timestamped stash and then confirms it captured everything (`git status` + `git stash list`) before reporting. Branch on `status`:
+   - `{"status": "nothing_to_stash"}` — the tree was already clean; nothing was pushed and there is no ref to drop later.
+   - `{"status": "stashed", "ref": "stash@{0}"}` — pushed and confirmed. Keep `ref` — it is the only handle for step 5.
+   - `{"status": "failed", "message": "<diagnostic>"}` (exit 1) — the push or its confirmation failed. Do not continue the rollback; escalate to the user with `message`.
 
 3. Re-examine the tasks in the failed wave. Common root causes:
    - Task descriptions were too vague (agents interpreted them differently)
@@ -306,8 +305,8 @@ When a wave produces fundamentally broken output that cannot be recovered throug
    - **Skip the wave** and mark tasks as unimplemented (user completes manually)
    - **Abort execution** entirely (stash remains, user takes over)
 
-5. If retrying: pop the stash only after the new wave succeeds:
+5. If retrying: drop the stash only after the new wave succeeds. Dropping never happens automatically — it always requires this explicit second call with the `ref` returned in step 2:
    ```bash
-   git stash drop stash@{0}
+   node "<PLUGIN_ROOT>/scripts/util/rollback-stash.js" stash --drop "<ref>"
    ```
-   If aborting: leave the stash for the user to inspect.
+   Returns `{"status": "dropped", "ref": "<ref>"}`, or `{"status": "failed", "ref": "<ref>", "message": "<diagnostic>"}` (exit 1). If aborting: leave the stash for the user to inspect.

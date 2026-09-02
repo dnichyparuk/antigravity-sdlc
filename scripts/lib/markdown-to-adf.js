@@ -207,10 +207,10 @@ function convert(markdown) {
     }
 
     // --- Unordered list ---
-    if (line.match(/^[\-\*]\s+/)) {
+    if (line.match(/^[-*]\s+/)) {
       const items = [];
-      while (i < lines.length && lines[i].match(/^[\-\*]\s+/)) {
-        items.push(buildListItem(lines[i].replace(/^[\-\*]\s+/, '')));
+      while (i < lines.length && lines[i].match(/^[-*]\s+/)) {
+        items.push(buildListItem(lines[i].replace(/^[-*]\s+/, '')));
         i++;
       }
       content.push({ type: 'bulletList', content: items });

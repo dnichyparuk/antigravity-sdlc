@@ -55,7 +55,7 @@ function slugify(name) {
  * @returns {boolean}
  */
 function isValidBranchName(name) {
-  return /^[a-zA-Z0-9/_.\-]+$/.test(name) && !/\.\./.test(name) && !name.endsWith('.lock');
+  return /^[a-zA-Z0-9/_.-]+$/.test(name) && !/\.\./.test(name) && !name.endsWith('.lock');
 }
 
 /**

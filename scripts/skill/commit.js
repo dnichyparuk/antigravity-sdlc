@@ -7,15 +7,33 @@
  *
  * Usage:
  *   node commit-prepare.js [options]
+ *   node commit-prepare.js --squash-execute [--fork-point <sha>]
+ *   node commit-prepare.js --stash-transaction --message <msg> [--amend] [--no-stash]
  *
  * Options:
- *   --no-stash       Skip stashing unstaged changes (passed through to output)
+ *   --no-stash       Skip stashing unstaged changes (passed through to output;
+ *                    also honoured by --stash-transaction)
  *   --scope <s>      Override conventional commit scope (passed through to output)
  *   --type <t>       Override conventional commit type (passed through to output)
- *   --amend          Amend last commit instead of creating new (passed through to output)
+ *   --amend          Amend last commit instead of creating new (passed through to output;
+ *                    also honoured by --stash-transaction)
  *   --auto           Skip interactive approval prompts (passed through to output)
  *   --no-squash-wip  Preserve `wip(execute):` commits instead of soft-resetting them
  *                    into the final commit (Fixes #392 / R35; passed through to output)
+ *
+ * Execution modes (one JSON line on stdout via writeJsonLine, not a manifest path):
+ *   --squash-execute      Perform the wip(execute): squash — `git reset --soft <forkPoint>`
+ *                         + `git add -A`. The fork-point is ALWAYS the value
+ *                         `detectWipSquash()` resolved: either passed back verbatim via
+ *                         `--fork-point <sha>` (read from this script's own detection
+ *                         output) or recomputed by calling `detectWipSquash()` here.
+ *                         It is never re-derived from a separate merge-base command, and
+ *                         never from the broken `git symbolic-ref --short HEAD`
+ *                         current-branch-name fallback (that made merge-base a no-op and
+ *                         let WIP commits silently survive the squash).
+ *   --stash-transaction   Run the stash → commit → stash-pop transaction and emit the
+ *                         `{committed, hookFailed, popConflict}` outcome. Requires
+ *                         `--message <msg>`.
  *
  * Exit codes:
  *   0 = success, JSON on stdout
@@ -28,11 +46,12 @@
 'use strict';
 
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 const LIB = path.join(__dirname, '..', 'lib');
 
 const { exec, checkGitState, splitDiffByFile } = require(path.join(LIB, 'git'));
 const { readSection, resolveSdlcRoot } = require(path.join(LIB, 'config'));
-const { writeOutput } = require(path.join(LIB, 'output'));
+const { writeOutput, writeJsonLine } = require(path.join(LIB, 'output'));
 const { writeManifestState } = require(path.join(LIB, 'state'));
 const { resolveSkipConfigCheck, ensureConfigVersion } = require(path.join(LIB, 'config-version-prepare'));
 const { truncateDiff } = require(path.join(LIB, 'diff-truncate'));
@@ -72,6 +91,10 @@ function parseArgs(argv) {
   let noSquashWip         = false;
   let expectedBranch      = null;
   let forceDefaultBranch  = false;
+  let squashExecute       = false;
+  let stashTransaction    = false;
+  let forkPoint           = null;
+  let message             = null;
   const warnings = [];
 
   for (let i = 0; i < args.length; i++) {
@@ -93,10 +116,21 @@ function parseArgs(argv) {
       expectedBranch = args[++i];
     } else if (a === '--force-default-branch') {
       forceDefaultBranch = true;
+    } else if (a === '--squash-execute') {
+      squashExecute = true;
+    } else if (a === '--stash-transaction') {
+      stashTransaction = true;
+    } else if (a === '--fork-point' && args[i + 1]) {
+      forkPoint = args[++i];
+    } else if (a === '--message' && args[i + 1]) {
+      message = args[++i];
     }
   }
 
-  return { noStash, scope, type, amend, auto, noSquashWip, expectedBranch, forceDefaultBranch, warnings };
+  return {
+    noStash, scope, type, amend, auto, noSquashWip, expectedBranch, forceDefaultBranch,
+    squashExecute, stashTransaction, forkPoint, message, warnings,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -120,14 +154,20 @@ function resolveDefaultBranch() {
 
 /**
  * Detects `wip(execute):` commits between the current branch's fork-point and HEAD.
- * Returns { commits: string[], stagedClean: boolean } — consumed by commit-sdlc
- * SKILL.md Step 1c to decide whether to soft-reset before generating the final
- * commit message.
+ * Returns { commits: string[], stagedClean: boolean, forkPoint: string|null } —
+ * consumed by commit-sdlc SKILL.md Step 1c to decide whether to soft-reset before
+ * generating the final commit message.
  *
- * Fork-point resolution order:
+ * `forkPoint` is the resolved commit-ish the squash must reset to. It is surfaced
+ * (rather than left internal) so the execution path — `runSquash()` /
+ * `--squash-execute` — resets to the *same* value detection used. Detection and
+ * execution can therefore never diverge: no consumer constructs its own
+ * merge-base command.
+ *
+ * Fork-point resolution order (DO NOT alter — execution reuses it verbatim):
  *   1. `git merge-base HEAD <upstream>` when an upstream is configured
  *   2. Detected default branch (origin/HEAD symbolic ref → main/master fallback)
- *   3. When neither resolves, returns { commits: [], stagedClean } — never errors
+ *   3. When neither resolves, returns forkPoint: null and commits: [] — never errors
  */
 function detectWipSquash() {
   const stagedRaw = exec('git diff --cached --name-only', { cwd: process.cwd() });
@@ -151,11 +191,11 @@ function detectWipSquash() {
   }
 
   if (!forkPoint) {
-    return { commits: [], stagedClean };
+    return { commits: [], stagedClean, forkPoint: null };
   }
 
   const logRaw = exec(`git log --format=%H%x09%s ${forkPoint}..HEAD`, { cwd: process.cwd() });
-  if (!logRaw) return { commits: [], stagedClean };
+  if (!logRaw) return { commits: [], stagedClean, forkPoint };
 
   const wipPrefixRe = /^wip\(execute\)/;
   const commits = logRaw
@@ -169,16 +209,251 @@ function detectWipSquash() {
     .filter(e => e && wipPrefixRe.test(e.subject))
     .map(e => e.sha);
 
-  return { commits, stagedClean };
+  return { commits, stagedClean, forkPoint };
+}
+
+// ---------------------------------------------------------------------------
+// Squash execution + stash transaction (Task 5)
+// ---------------------------------------------------------------------------
+
+/**
+ * Run a git command and normalize its result. Mirrors the spawnSync result
+ * normalization used by scripts/util/rollback-stash.js.
+ *
+ * @param {Function} spawnFn
+ * @param {string[]} cmdArgs
+ * @param {string} cwd
+ * @returns {{status: number|null, stdout: string, stderr: string}}
+ */
+function runGit(spawnFn, cmdArgs, cwd) {
+  const result = spawnFn('git', cmdArgs, { cwd, encoding: 'utf8' });
+  return {
+    status: result.status,
+    stdout: (result.stdout || '').trim(),
+    stderr: (result.stderr || '').trim(),
+  };
+}
+
+/**
+ * Execute the `wip(execute):` squash: `git reset --soft <forkPoint>` followed by
+ * `git add -A`.
+ *
+ * `forkPoint` MUST be the value `detectWipSquash()` resolved — this function never
+ * re-derives it. Passing a falsy fork-point is refused rather than guessed at: a
+ * missing fork-point previously degraded to `git symbolic-ref --short HEAD`, which
+ * made `git merge-base HEAD <that-branch>` a no-op and silently left the WIP
+ * commits in history.
+ *
+ * @param {string|null} forkPoint  Commit-ish from detectWipSquash().forkPoint.
+ * @param {{spawnFn?: Function, cwd?: string}} [opts]
+ * @returns {{status: 'squashed', forkPoint: string}
+ *          |{status: 'failed', forkPoint: string|null, message: string}}
+ */
+function runSquash(forkPoint, { spawnFn = spawnSync, cwd = process.cwd() } = {}) {
+  if (!forkPoint || typeof forkPoint !== 'string' || forkPoint.trim().length === 0) {
+    return {
+      status: 'failed',
+      forkPoint: forkPoint || null,
+      message: 'No fork-point resolved by detectWipSquash() — refusing to soft-reset.',
+    };
+  }
+  const resolved = forkPoint.trim();
+
+  const reset = runGit(spawnFn, ['reset', '--soft', resolved], cwd);
+  if (reset.status !== 0) {
+    return {
+      status: 'failed',
+      forkPoint: resolved,
+      message: reset.stderr || reset.stdout || 'git reset --soft failed',
+    };
+  }
+
+  const add = runGit(spawnFn, ['add', '-A'], cwd);
+  if (add.status !== 0) {
+    return {
+      status: 'failed',
+      forkPoint: resolved,
+      message: add.stderr || add.stdout || 'git add -A failed',
+    };
+  }
+
+  return { status: 'squashed', forkPoint: resolved };
+}
+
+const STASH_MESSAGE = 'commit-sdlc: temp stash';
+
+/**
+ * Wrap the commit in the stash transaction:
+ *   git stash push --keep-index -m "commit-sdlc: temp stash"
+ *   <commitFn>                    (git commit / git commit --amend)
+ *   git stash pop
+ *
+ * The failure taxonomy is emitted HERE and nowhere else — commit-sdlc SKILL.md
+ * Step 5 reads this shape, it never re-derives it:
+ *
+ *   {"committed": true,  "hookFailed": false, "popConflict": false}
+ *   {"committed": false, "hookFailed": true,  "popConflict": false,
+ *    "reason": "pre-commit hook exited non-zero"}
+ *   {"committed": true,  "hookFailed": false, "popConflict": true,
+ *    "conflictFiles": ["path/a.js"]}
+ *
+ * A `git stash push` failure aborts before any commit is attempted and returns
+ * the same three flags with `committed: false` plus a `reason`.
+ *
+ * On hook failure the stash is deliberately LEFT in place (SKILL.md tells the
+ * user to `git stash list`); popping it would discard the isolation the
+ * transaction just established.
+ *
+ * @param {Function} commitFn  () => {status, stdout, stderr} — runs the commit.
+ * @param {{spawnFn?: Function, cwd?: string, noStash?: boolean}} [opts]
+ * @returns {{committed: boolean, hookFailed: boolean, popConflict: boolean,
+ *            reason?: string, detail?: string, conflictFiles?: string[]}}
+ */
+function runStashTransaction(commitFn, { spawnFn = spawnSync, cwd = process.cwd(), noStash = false } = {}) {
+  let stashed = false;
+
+  if (!noStash) {
+    // `--keep-index` only stashes modified tracked files, so the same check
+    // decides whether a stash is needed at all.
+    const unstaged = runGit(spawnFn, ['diff', '--name-only'], cwd);
+    const hasUnstaged = unstaged.status === 0 && unstaged.stdout.length > 0;
+
+    if (hasUnstaged) {
+      const push = runGit(spawnFn, ['stash', 'push', '--keep-index', '-m', STASH_MESSAGE], cwd);
+      if (push.status !== 0) {
+        return {
+          committed: false,
+          hookFailed: false,
+          popConflict: false,
+          reason: 'git stash push failed',
+          detail: push.stderr || push.stdout || '',
+        };
+      }
+      stashed = !/no local changes to save/i.test(push.stdout);
+    }
+  }
+
+  const commit = commitFn();
+  const commitStatus = commit && typeof commit.status === 'number' ? commit.status : 1;
+  if (commitStatus !== 0) {
+    // Stash intentionally left in place — SKILL.md instructs the user to recover it.
+    const detail = ((commit && commit.stderr) || (commit && commit.stdout) || '').trim();
+    const out = {
+      committed: false,
+      hookFailed: true,
+      popConflict: false,
+      reason: 'pre-commit hook exited non-zero',
+    };
+    if (detail) out.detail = detail;
+    return out;
+  }
+
+  if (!stashed) {
+    return { committed: true, hookFailed: false, popConflict: false };
+  }
+
+  const pop = runGit(spawnFn, ['stash', 'pop'], cwd);
+  if (pop.status !== 0) {
+    return {
+      committed: true,
+      hookFailed: false,
+      popConflict: true,
+      conflictFiles: collectConflictFiles(spawnFn, cwd, pop),
+    };
+  }
+
+  return { committed: true, hookFailed: false, popConflict: false };
+}
+
+/**
+ * Resolve the conflicted paths left behind by a failed `git stash pop`.
+ * Prefers the unmerged index (`--diff-filter=U`); falls back to parsing the
+ * `CONFLICT (...): Merge conflict in <path>` lines git printed.
+ */
+function collectConflictFiles(spawnFn, cwd, popResult) {
+  const unmerged = runGit(spawnFn, ['diff', '--name-only', '--diff-filter=U'], cwd);
+  if (unmerged.status === 0 && unmerged.stdout.length > 0) {
+    return unmerged.stdout.split('\n').map(l => l.trim()).filter(Boolean);
+  }
+
+  const text = `${popResult.stdout}\n${popResult.stderr}`;
+  const files = [];
+  for (const line of text.split('\n')) {
+    const m = line.match(/^CONFLICT \([^)]*\): Merge conflict in (.+)$/);
+    if (m) files.push(m[1].trim());
+  }
+  return files;
 }
 
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
+/**
+ * `--squash-execute`: soft-reset to the fork-point detectWipSquash() resolved and
+ * re-stage. `--fork-point <sha>` passes that value straight back from this script's
+ * own detection output; when omitted the value is recomputed by calling
+ * detectWipSquash() here. Either way the value comes from the single fork-point
+ * resolver — never from a caller-constructed merge-base.
+ */
+function runSquashExecuteMode(cliForkPoint) {
+  let forkPoint = cliForkPoint;
+  if (!forkPoint) {
+    try {
+      forkPoint = detectWipSquash().forkPoint;
+    } catch (err) {
+      writeJsonLine(
+        { status: 'failed', forkPoint: null, message: `Could not resolve fork-point: ${err.message}` },
+        { exitCode: 1 },
+      );
+      return;
+    }
+  }
+  const result = runSquash(forkPoint);
+  writeJsonLine(result, { exitCode: result.status === 'failed' ? 1 : 0 });
+}
+
+/**
+ * `--stash-transaction`: run stash → commit → stash-pop and emit the
+ * {committed, hookFailed, popConflict} outcome.
+ */
+function runStashTransactionMode({ message, amend, noStash }) {
+  if (!message) {
+    writeJsonLine(
+      {
+        committed: false,
+        hookFailed: false,
+        popConflict: false,
+        reason: '--stash-transaction requires --message <msg>',
+      },
+      { exitCode: 1 },
+    );
+    return;
+  }
+
+  const commitArgs = amend ? ['commit', '--amend', '-m', message] : ['commit', '-m', message];
+  const commitFn = () => runGit(spawnSync, commitArgs, process.cwd());
+
+  const result = runStashTransaction(commitFn, { noStash });
+  writeJsonLine(result, { exitCode: result.committed ? 0 : 1 });
+}
+
 function main() {
+  const parsed = parseArgs(process.argv);
+
+  // Execution modes short-circuit the prepare pipeline: they perform git work and
+  // emit one JSON line, rather than building the commit-context manifest.
+  if (parsed.squashExecute) {
+    runSquashExecuteMode(parsed.forkPoint);
+    return;
+  }
+  if (parsed.stashTransaction) {
+    runStashTransactionMode(parsed);
+    return;
+  }
+
   const projectRoot = resolveSdlcRoot(); // issue #351: route to main worktree .sdlc/
-  const { noStash, scope, type, amend, auto, noSquashWip, expectedBranch, forceDefaultBranch, warnings: parseWarnings } = parseArgs(process.argv);
+  const { noStash, scope, type, amend, auto, noSquashWip, expectedBranch, forceDefaultBranch, warnings: parseWarnings } = parsed;
 
   const errors   = [];
   const warnings = [...parseWarnings];
@@ -256,7 +531,7 @@ function main() {
     wipSquashEarly = detectWipSquash();
   } catch (err) {
     warnings.push(`Could not detect wip(execute): commits for squash: ${err.message}`);
-    wipSquashEarly = { commits: [], stagedClean: true };
+    wipSquashEarly = { commits: [], stagedClean: true, forkPoint: null };
   }
 
   // Step 5: Error if nothing staged and not amending
@@ -366,4 +641,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { parseArgs };
+module.exports = { parseArgs, resolveDefaultBranch, detectWipSquash, runSquash, runStashTransaction };

@@ -84,11 +84,22 @@ On `yes`:
 1. If `changelog.exists === false`: create CHANGELOG.md with a standard header + the new entry.
 2. If the `## [currentVersion]` section exists in the changelog: use the Edit tool to replace it with the updated entry.
 3. If the `## [currentVersion]` section does not exist yet: prepend the entry after the `## [Unreleased]` section (if present) or after the file header.
-4. Stage: `git add <changelog.filePath>`
-5. Commit: `git commit -m "docs: update changelog for ${currentTag}"`
-6. Push (unless `flags.noPush === true`): `git push`
+4. Stage, commit and push the changelog in one scripted step:
 
-**Do NOT create a new tag.** This workflow only updates the changelog.
+   ```shell
+   node "<PLUGIN_ROOT>/scripts/util/version-execute.js" changelog-commit --tag <currentTag> --changelog-file <changelog.filePath>
+   ```
+
+   > **Contract (Input/Output):**
+   > - **Input**: `--tag <currentTag>` (drives the `docs: update changelog for <tag>` commit subject), `--changelog-file <path>` (defaults to `CHANGELOG.md`), `--no-push` when `flags.noPush === true`.
+   > - **Output**: one JSON line — `{"status":"ok"}` on success (plus `"pushed":false` under `--no-push`), or `{"status":"failed","failedStep":"add"|"commit"|"push","reason":"..."}`, with additive `committed: true` / `pushed: false` when the commit landed but the push failed.
+
+   Branch on the result:
+   - `{"status":"ok", ...}` — continue to the result display.
+   - `{"status":"failed","failedStep":"push","committed":true, ...}` — the commit landed locally and only the push failed. Show `reason` and tell the user to push manually once the cause is resolved.
+   - `{"status":"failed", ...}` with any other `failedStep` — nothing was committed. Show `reason` and stop.
+
+**Do NOT create a new tag.** This workflow only updates the changelog — `changelog-commit` creates none.
 
 Display result:
 ```

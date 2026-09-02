@@ -35,6 +35,7 @@
 
 'use strict';
 
+const fs = require('fs');
 const { fetchPrChecks, fetchFailedCheckLogs } = require('../lib/git');
 
 // ---------------------------------------------------------------------------
@@ -43,16 +44,18 @@ const { fetchPrChecks, fetchFailedCheckLogs } = require('../lib/git');
 
 /**
  * @param {string[]} argv  Full argv (process.argv shape).
- * @returns {{prNumber: string|null, unknown: string|null}}
+ * @returns {{prNumber: string|null, logs: string|null, unknown: string|null}}
  */
 function parseArgs(argv) {
   const args = argv.slice(2);
-  const parsed = { prNumber: null, unknown: null };
+  const parsed = { prNumber: null, logs: null, unknown: null };
 
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === '--pr-number') {
       parsed.prNumber = args[++i] !== undefined ? args[i] : null;
+    } else if (a === '--logs') {
+      parsed.logs = args[++i] !== undefined ? args[i] : null;
     } else if (a.startsWith('--')) {
       parsed.unknown = a;
       break;
@@ -63,14 +66,36 @@ function parseArgs(argv) {
 }
 
 // ---------------------------------------------------------------------------
+// Logs flag resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve the --logs flag value: read file if path exists, else treat as inline text.
+ *
+ * @param {string} value  The --logs flag value.
+ * @returns {string}  Either the file contents or the literal value.
+ */
+function resolveLogsFlag(value) {
+  if (fs.existsSync(value)) {
+    return fs.readFileSync(value, 'utf8');
+  }
+  return value;
+}
+
+// ---------------------------------------------------------------------------
 // Log resolution
 // ---------------------------------------------------------------------------
 
 /**
- * Resolve the failure-log excerpt for `--pr-number`'s latest failed check.
- * Mirrors fetch_logs.sh's inline `node -e` logic 1:1: find the first check
- * whose bucket is 'fail', pull the run id out of its link URL, then fetch a
- * tail-trimmed log excerpt for that run.
+ * Resolve the failure-log excerpt for `--pr-number`'s latest failed check,
+ * or return the resolved content of `--logs`.
+ *
+ * When --pr-number is supplied, mirrors fetch_logs.sh's inline `node -e` logic 1:1:
+ * find the first check whose bucket is 'fail', pull the run id out of its link URL,
+ * then fetch a tail-trimmed log excerpt for that run.
+ *
+ * When --logs is supplied, read the file at that path (if it exists) or treat it
+ * as inline text (if it doesn't).
  *
  * @param {string[]} argv  Full argv (process.argv shape).
  * @param {{fetchPrChecksFn?: Function, fetchFailedCheckLogsFn?: Function}} [deps]  Injectable for tests.
@@ -83,12 +108,27 @@ function fetchLogs(argv, { fetchPrChecksFn = fetchPrChecks, fetchFailedCheckLogs
     return { stdout: '', stderr: `Unknown parameter passed: ${opts.unknown}\n`, exitCode: 1 };
   }
 
+  // Validate mutual exclusivity
+  if (opts.prNumber !== null && opts.logs !== null) {
+    return { stdout: '', stderr: '--pr-number and --logs are mutually exclusive\n', exitCode: 1 };
+  }
+
+  // --logs path
+  if (opts.logs !== null) {
+    const content = resolveLogsFlag(opts.logs);
+    return { stdout: content, stderr: '', exitCode: 0 };
+  }
+
+  // --pr-number path
   if (!opts.prNumber || !/^\d+$/.test(opts.prNumber)) {
     return { stdout: '', stderr: '--pr-number <n> is required and must be numeric\n', exitCode: 1 };
   }
 
-  const checks = fetchPrChecksFn(opts.prNumber);
-  const failed = Array.isArray(checks) ? checks.find((c) => c && c.bucket === 'fail') : null;
+  const { checks, ghAuthenticated, errorMessage } = fetchPrChecksFn(opts.prNumber);
+  if (!ghAuthenticated) {
+    return { stdout: '', stderr: `${errorMessage}\n`, exitCode: 0 };
+  }
+  const failed = checks.find((c) => c && c.bucket === 'fail');
   if (!failed || !failed.link) {
     return { stdout: '', stderr: 'no failed check found\n', exitCode: 0 };
   }
@@ -126,4 +166,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { parseArgs, fetchLogs, main };
+module.exports = { parseArgs, resolveLogsFlag, fetchLogs, main };

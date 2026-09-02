@@ -1449,7 +1449,7 @@ function main() {
         lowComplexity = true;
       }
     }
-  } catch (e) {}
+  } catch (e) { /* diff stat unavailable — leave lowComplexity at its default */ }
   result.lowComplexity = lowComplexity;
   const exitCode = errors.length > 0 ? 1 : 0;
   
