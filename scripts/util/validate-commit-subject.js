@@ -16,6 +16,8 @@
 
 'use strict';
 
+const USAGE = 'usage: validate-commit-subject.js <pattern> <subject>';
+
 /**
  * @param {string[]} argv  process.argv
  * @returns {{ pattern: string|undefined, subject: string|undefined }}
@@ -30,7 +32,19 @@ function parseArgs(argv) {
  */
 function main(argv) {
   const { pattern, subject } = parseArgs(argv);
-  const re = new RegExp(pattern);
+  if (typeof subject !== 'string' || typeof pattern !== 'string') {
+    console.error(USAGE);
+    process.exit(1);
+    return;
+  }
+  let re;
+  try {
+    re = new RegExp(pattern);
+  } catch (e) {
+    console.error(`invalid pattern: ${e.message}`);
+    process.exit(1);
+    return;
+  }
   if (!re.test(subject)) {
     process.exit(1);
     return;

@@ -27,3 +27,31 @@ test('parseArgs: extracts the positional pattern and subject', () => {
   assert.equal(pattern, '^feat');
   assert.equal(subject, 'feat: x');
 });
+
+test('validate-commit-subject: missing subject -> usage on stderr, exit 1', () => {
+  const result = run(['^(feat|fix|chore)(\\(.+\\))?: .+']);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /^usage: validate-commit-subject\.js <pattern> <subject>/);
+});
+
+test('validate-commit-subject: missing pattern and subject -> usage on stderr, exit 1', () => {
+  const result = run([]);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /^usage: validate-commit-subject\.js <pattern> <subject>/);
+});
+
+test('validate-commit-subject: invalid regex pattern -> stderr message, exit 1', () => {
+  const result = run(['(unclosed', 'feat: x']);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /^invalid pattern: /);
+});
+
+test('validate-commit-subject: empty-string subject is still tested against the pattern, not rejected as missing', () => {
+  const result = run(['^$', '']);
+  assert.equal(result.status, 0);
+});
+
+test('validate-commit-subject: regression — missing subject must not coerce to the literal "undefined" and pass', () => {
+  const result = run(['^undefined$']);
+  assert.equal(result.status, 1);
+});

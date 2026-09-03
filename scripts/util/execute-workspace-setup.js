@@ -46,9 +46,30 @@ const { execFileSync } = require('node:child_process');
 
 const LIB = path.join(__dirname, '..', 'lib');
 
-const { readSection, resolveSdlcRoot } = require(path.join(LIB, 'config'));
-const { resolveBranchName } = require(path.join(LIB, 'branch-name'));
-const { writeJsonLine } = require(path.join(LIB, 'output'));
+let libs = null;
+
+/**
+ * Require all shared libs, memoized so repeated calls are free.
+ *
+ * Invoked at the top of `main()`, inside the `require.main === module`
+ * try/catch: a missing lib throws `MODULE_NOT_FOUND` there, where it is
+ * converted into the documented
+ * `{"status":"error","error":"Could not locate scripts/lib/<name>.js"}` + exit
+ * 2 payload instead of a raw stack trace. Also called lazily by the helpers
+ * below so `runWorkspaceSetup()` keeps working when tests invoke it directly
+ * without going through `main()`.
+ * @returns {object}
+ */
+function loadLibs() {
+  if (!libs) {
+    libs = {
+      config:     require(path.join(LIB, 'config.js')),
+      branchName: require(path.join(LIB, 'branch-name.js')),
+      output:     require(path.join(LIB, 'output.js')),
+    };
+  }
+  return libs;
+}
 
 // Sibling CLI — resolved relative to __dirname, so the shell version's
 // `plugins/lift-sdlc/...` fallback probing is no longer needed.
@@ -109,6 +130,7 @@ function parseArgs(argv) {
  */
 function readSectionSafe(section) {
   try {
+    const { readSection, resolveSdlcRoot } = loadLibs().config;
     return readSection(resolveSdlcRoot(), section) || {};
   } catch (_) {
     return {};
@@ -137,6 +159,7 @@ function resolveExecuteBranch(opts) {
   if (opts.branchName) return opts.branchName;
   try {
     const cfg = readSectionSafe('workspace').branch || {};
+    const { resolveBranchName } = loadLibs().branchName;
     return resolveBranchName({
       type:   opts.logicalType || 'feature',
       slug:   opts.derivedSlug || 'feature-branch',
@@ -148,16 +171,16 @@ function resolveExecuteBranch(opts) {
 }
 
 /**
- * Run a git subcommand without a shell. Returns true on success.
+ * Run a git subcommand without a shell, capturing stderr for diagnostics.
  * @param {string[]} args
- * @returns {boolean}
+ * @returns {{ok: boolean, stderr: string}}
  */
 function runGit(args) {
   try {
-    execFileSync('git', args, { stdio: 'ignore' });
-    return true;
-  } catch (_) {
-    return false;
+    execFileSync('git', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    return { ok: true, stderr: '' };
+  } catch (err) {
+    return { ok: false, stderr: String(err.stderr || err.message).trim() };
   }
 }
 
@@ -207,9 +230,11 @@ function createWorktree(branchName) {
  * Run the three-step workspace setup.
  *
  * @param {string[]} argv  Full argv (process.argv shape).
+ * @param {{runGitFn?: Function}} [options]
  * @returns {{json: object|null, stderr: string, exitCode: number}}
  */
-function runWorkspaceSetup(argv) {
+function runWorkspaceSetup(argv, options = {}) {
+  const { runGitFn = runGit } = options;
   const opts = parseArgs(argv);
 
   if (opts.unknown !== null) {
@@ -227,8 +252,19 @@ function runWorkspaceSetup(argv) {
   let stderr = '';
 
   if (workspaceMode === 'branch' && executeBranch) {
-    if (!runGit(['checkout', executeBranch])) {
-      runGit(['checkout', '-b', executeBranch]);
+    const checkoutResult = runGitFn(['checkout', executeBranch]);
+    if (!checkoutResult.ok) {
+      const createResult = runGitFn(['checkout', '-b', executeBranch]);
+      if (!createResult.ok) {
+        return {
+          json: {
+            status: 'error',
+            error: `Could not switch to or create branch ${executeBranch}: ${createResult.stderr}`,
+          },
+          stderr: '',
+          exitCode: 2,
+        };
+      }
     }
   } else if (workspaceMode === 'worktree' && executeBranch) {
     if (!fs.existsSync(WORKTREE_CREATE_SCRIPT)) {
@@ -257,6 +293,7 @@ function runWorkspaceSetup(argv) {
 // ---------------------------------------------------------------------------
 
 function main(argv) {
+  const { writeJsonLine } = loadLibs().output;
   const { json, stderr, exitCode } = runWorkspaceSetup(argv);
   if (stderr) process.stderr.write(stderr);
   if (json === null) process.exit(exitCode);
@@ -267,6 +304,12 @@ if (require.main === module) {
   try {
     main(process.argv);
   } catch (err) {
+    if (err.code === 'MODULE_NOT_FOUND') {
+      const match = err.message.match(/scripts[\\/]lib[\\/][\w-]+\.js/);
+      const name = match ? match[0] : 'a required lib module';
+      process.stdout.write(JSON.stringify({ status: 'error', error: `Could not locate ${name}` }) + '\n');
+      process.exit(2);
+    }
     process.stdout.write(JSON.stringify({ status: 'error', error: `Unexpected error: ${err.message}` }) + '\n');
     process.exit(2);
   }

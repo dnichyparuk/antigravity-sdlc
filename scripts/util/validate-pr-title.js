@@ -18,6 +18,8 @@
 
 'use strict';
 
+const USAGE = 'usage: validate-pr-title.js <title> <pattern> [errorMessage]';
+
 /**
  * @param {string[]} argv  process.argv
  * @returns {{ title: string|undefined, pattern: string|undefined, errorMessage: string|undefined }}
@@ -32,7 +34,19 @@ function parseArgs(argv) {
  */
 function main(argv) {
   const { title, pattern, errorMessage } = parseArgs(argv);
-  const re = new RegExp(pattern);
+  if (typeof title !== 'string' || typeof pattern !== 'string') {
+    console.error(USAGE);
+    process.exit(1);
+    return;
+  }
+  let re;
+  try {
+    re = new RegExp(pattern);
+  } catch (e) {
+    console.error(`invalid pattern: ${e.message}`);
+    process.exit(1);
+    return;
+  }
   if (!re.test(title)) {
     console.error(errorMessage || pattern);
     process.exit(1);

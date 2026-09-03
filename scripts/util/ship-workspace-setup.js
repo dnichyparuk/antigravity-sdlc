@@ -44,11 +44,32 @@ const { execFileSync } = require('node:child_process');
 
 const LIB = path.join(__dirname, '..', 'lib');
 
-const { readSection, resolveSdlcRoot } = require(path.join(LIB, 'config'));
-const { resolveBranchName }            = require(path.join(LIB, 'branch-name'));
-const { readState, resolveBranch, slugifyBranch, migrateBranchSlug } = require(path.join(LIB, 'state'));
-const { exec }         = require(path.join(LIB, 'git'));
-const { writeJsonLine } = require(path.join(LIB, 'output'));
+let libs = null;
+
+/**
+ * Require all shared libs, memoized so repeated calls are free.
+ *
+ * Invoked at the top of `main()`, inside the `require.main === module`
+ * try/catch: a missing lib throws `MODULE_NOT_FOUND` there, where it is
+ * converted into the documented
+ * `{"status":"error","error":"Could not locate scripts/lib/<name>.js"}` + exit
+ * 2 payload instead of a raw stack trace. Also called lazily by the helpers
+ * below so `runWorkspaceSetup()` keeps working when tests invoke it directly
+ * without going through `main()`.
+ * @returns {object}
+ */
+function loadLibs() {
+  if (!libs) {
+    libs = {
+      config:     require(path.join(LIB, 'config.js')),
+      branchName: require(path.join(LIB, 'branch-name.js')),
+      state:      require(path.join(LIB, 'state.js')),
+      git:        require(path.join(LIB, 'git.js')),
+      output:     require(path.join(LIB, 'output.js')),
+    };
+  }
+  return libs;
+}
 
 // Sibling CLI — resolved relative to __dirname, so the shell version's
 // `plugins/lift-sdlc/...` fallback probing is no longer needed.
@@ -107,6 +128,7 @@ function parseArgs(argv) {
  */
 function readSectionSafe(section) {
   try {
+    const { readSection, resolveSdlcRoot } = loadLibs().config;
     return readSection(resolveSdlcRoot(), section) || {};
   } catch (_) {
     return {};
@@ -131,6 +153,7 @@ function resolveWorkspaceMode(flag) {
  * @returns {string}
  */
 function resolveDefaultBranch() {
+  const { exec } = loadLibs().git;
   const ref = exec('git symbolic-ref --short refs/remotes/origin/HEAD', {
     stdio: ['ignore', 'pipe', 'ignore'],
   });
@@ -142,6 +165,7 @@ function resolveDefaultBranch() {
  * @returns {string} current branch, or '' when it cannot be determined.
  */
 function resolveCurrentBranch() {
+  const { exec } = loadLibs().git;
   return exec('git branch --show-current') || '';
 }
 
@@ -179,6 +203,7 @@ function readCwdAssertions(prepareOutputFile) {
  */
 function readShipStateBranch() {
   try {
+    const { readState, resolveBranch, slugifyBranch } = loadLibs().state;
     const branch = resolveBranch();
     const found  = readState('ship', slugifyBranch(branch));
     if (found && found.data && typeof found.data.branch === 'string') {
@@ -191,16 +216,16 @@ function readShipStateBranch() {
 }
 
 /**
- * Run a git subcommand without a shell. Returns true on success.
+ * Run a git subcommand without a shell, capturing stderr for diagnostics.
  * @param {string[]} args
- * @returns {boolean}
+ * @returns {{ok: boolean, stderr: string}}
  */
 function runGit(args) {
   try {
-    execFileSync('git', args, { stdio: 'ignore' });
-    return true;
-  } catch (_) {
-    return false;
+    execFileSync('git', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    return { ok: true, stderr: '' };
+  } catch (err) {
+    return { ok: false, stderr: String(err.stderr || err.message).trim() };
   }
 }
 
@@ -248,9 +273,11 @@ function createWorktree(branchName) {
  * Run the full six-step workspace setup.
  *
  * @param {string[]} argv  Full argv (process.argv shape).
+ * @param {{runGitFn?: Function}} [options]
  * @returns {{json: object|null, stderr: string, exitCode: number}}
  */
-function runWorkspaceSetup(argv) {
+function runWorkspaceSetup(argv, options = {}) {
+  const { runGitFn = runGit } = options;
   const opts = parseArgs(argv);
 
   if (opts.unknown !== null) {
@@ -287,6 +314,7 @@ function runWorkspaceSetup(argv) {
   // --- 3. Cwd assertion -----------------------------------------------------
   const assertions = readCwdAssertions(opts.prepareOutputFile);
   if (assertions.requireMainWorktreeCwd && assertions.expectedMainWorktreeRoot) {
+    const { exec } = loadLibs().git;
     const actualCwd = exec('git rev-parse --show-toplevel', {
       stdio: ['ignore', 'pipe', 'ignore'],
     }) || '';
@@ -306,6 +334,7 @@ function runWorkspaceSetup(argv) {
   const branchCfg = readSectionSafe('workspace').branch || {};
   let executeBranch;
   try {
+    const { resolveBranchName } = loadLibs().branchName;
     executeBranch = resolveBranchName({
       type:   opts.logicalType || 'feature',
       slug:   opts.derivedSlug || 'feature-branch',
@@ -325,6 +354,7 @@ function runWorkspaceSetup(argv) {
     // Mirrors the shell `sed 's|[^a-zA-Z0-9-]|-|g'` (same rule as slugifyBranch).
     const fromSlug = stateBranch.replace(/[^a-zA-Z0-9-]/g, '-');
     try {
+      const { migrateBranchSlug } = loadLibs().state;
       migrateBranchSlug({ prefix: 'ship', fromSlug, toBranch: executeBranch });
     } catch (_) {
       // Migration is best-effort — the shell version discarded errors too.
@@ -336,8 +366,19 @@ function runWorkspaceSetup(argv) {
   let stderr = '';
 
   if (workspaceMode === 'branch') {
-    if (!runGit(['checkout', executeBranch])) {
-      runGit(['checkout', '-b', executeBranch]);
+    const checkoutResult = runGitFn(['checkout', executeBranch]);
+    if (!checkoutResult.ok) {
+      const createResult = runGitFn(['checkout', '-b', executeBranch]);
+      if (!createResult.ok) {
+        return {
+          json: {
+            status: 'error',
+            error: `Could not switch to or create branch ${executeBranch}: ${createResult.stderr}`,
+          },
+          stderr: '',
+          exitCode: 2,
+        };
+      }
     }
   } else if (workspaceMode === 'worktree') {
     if (!fs.existsSync(WORKTREE_CREATE_SCRIPT)) {
@@ -366,6 +407,7 @@ function runWorkspaceSetup(argv) {
 // ---------------------------------------------------------------------------
 
 function main(argv) {
+  const { writeJsonLine } = loadLibs().output;
   const { json, stderr, exitCode } = runWorkspaceSetup(argv);
   if (stderr) process.stderr.write(stderr);
   if (json === null) process.exit(exitCode);
@@ -376,6 +418,12 @@ if (require.main === module) {
   try {
     main(process.argv);
   } catch (err) {
+    if (err.code === 'MODULE_NOT_FOUND') {
+      const match = err.message.match(/scripts[\\/]lib[\\/][\w-]+\.js/);
+      const name = match ? match[0] : 'a required lib module';
+      process.stdout.write(JSON.stringify({ status: 'error', error: `Could not locate ${name}` }) + '\n');
+      process.exit(2);
+    }
     process.stdout.write(JSON.stringify({ status: 'error', error: `Unexpected error: ${err.message}` }) + '\n');
     process.exit(2);
   }

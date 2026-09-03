@@ -7,7 +7,7 @@ const os     = require('node:os');
 const path   = require('node:path');
 const { execFileSync, spawnSync } = require('node:child_process');
 
-const { parseArgs } = require('./ship-workspace-setup');
+const { parseArgs, runWorkspaceSetup } = require('./ship-workspace-setup');
 
 const SCRIPT = path.join(__dirname, 'ship-workspace-setup.js');
 
@@ -37,6 +37,38 @@ function run(args, cwd) {
   let json = null;
   try { json = JSON.parse(res.stdout); } catch (_) { /* left null */ }
   return { status: res.status, stdout: res.stdout, stderr: res.stderr, json };
+}
+
+/**
+ * Run `runWorkspaceSetup` in-process against a temp repo, with a stubbed
+ * `runGitFn` so the branch-checkout git calls never touch the real `git`
+ * binary. Restores cwd/env afterwards.
+ */
+function runInProcess(args, cwd, runGitFn) {
+  const originalCwd = process.cwd();
+  const originalOverride = process.env.SDLC_STATE_DIR_OVERRIDE;
+  process.chdir(cwd);
+  process.env.SDLC_STATE_DIR_OVERRIDE = path.join(cwd, '.sdlc-test-state');
+  try {
+    return runWorkspaceSetup(['node', 'ship-workspace-setup.js', ...args], { runGitFn });
+  } finally {
+    process.chdir(originalCwd);
+    if (originalOverride === undefined) delete process.env.SDLC_STATE_DIR_OVERRIDE;
+    else process.env.SDLC_STATE_DIR_OVERRIDE = originalOverride;
+  }
+}
+
+function makeGitStub(results) {
+  let call = 0;
+  const calls = [];
+  const fn = (args) => {
+    calls.push(args);
+    const result = results[call] !== undefined ? results[call] : { ok: true, stderr: '' };
+    call++;
+    return result;
+  };
+  fn.calls = calls;
+  return fn;
 }
 
 // ---------------------------------------------------------------------------
@@ -101,6 +133,73 @@ test('branch mode creates the resolved branch and reports success', () => {
   }
 });
 
+test('branch mode: first checkout succeeds -> success (injected runGitFn)', () => {
+  const repo = makeTempRepo();
+  try {
+    const gitStub = makeGitStub([{ ok: true, stderr: '' }]);
+    const result = runInProcess(
+      ['--workspace-flag', 'branch', '--logical-type', 'feature', '--derived-slug', 'my-thing'],
+      repo,
+      gitStub
+    );
+
+    assert.strictEqual(result.exitCode, 0);
+    assert.strictEqual(result.json.status, 'success');
+    assert.strictEqual(result.json.executeBranch, 'feat/my-thing');
+    assert.strictEqual(gitStub.calls.length, 1);
+    assert.deepStrictEqual(gitStub.calls[0], ['checkout', 'feat/my-thing']);
+  } finally {
+    fs.rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('branch mode: first checkout fails, -b succeeds -> success (injected runGitFn)', () => {
+  const repo = makeTempRepo();
+  try {
+    const gitStub = makeGitStub([
+      { ok: false, stderr: 'error: pathspec did not match' },
+      { ok: true, stderr: '' },
+    ]);
+    const result = runInProcess(
+      ['--workspace-flag', 'branch', '--logical-type', 'feature', '--derived-slug', 'my-thing'],
+      repo,
+      gitStub
+    );
+
+    assert.strictEqual(result.exitCode, 0);
+    assert.strictEqual(result.json.status, 'success');
+    assert.strictEqual(result.json.executeBranch, 'feat/my-thing');
+    assert.strictEqual(gitStub.calls.length, 2);
+    assert.deepStrictEqual(gitStub.calls[0], ['checkout', 'feat/my-thing']);
+    assert.deepStrictEqual(gitStub.calls[1], ['checkout', '-b', 'feat/my-thing']);
+  } finally {
+    fs.rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('branch mode: both checkout attempts fail -> error status, exit 2', () => {
+  const repo = makeTempRepo();
+  try {
+    const gitStub = makeGitStub([
+      { ok: false, stderr: 'error: pathspec did not match any file(s)' },
+      { ok: false, stderr: "fatal: a branch named 'feat/my-thing' already exists" },
+    ]);
+    const result = runInProcess(
+      ['--workspace-flag', 'branch', '--logical-type', 'feature', '--derived-slug', 'my-thing'],
+      repo,
+      gitStub
+    );
+
+    assert.strictEqual(result.exitCode, 2);
+    assert.strictEqual(result.json.status, 'error');
+    assert.match(result.json.error, /feat\/my-thing/);
+    assert.match(result.json.error, /a branch named 'feat\/my-thing' already exists/);
+    assert.strictEqual(gitStub.calls.length, 2);
+  } finally {
+    fs.rmSync(repo, { recursive: true, force: true });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Error paths
 // ---------------------------------------------------------------------------
@@ -155,5 +254,42 @@ test('unknown parameter exits 1 with a stderr diagnostic and no stdout JSON', ()
     assert.match(res.stderr, /Unknown parameter passed: --nope/);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('missing lib produces parseable JSON + exit 2 instead of a raw stack trace', () => {
+  // Copies the script + its lib/ sibling into an isolated temp tree, then
+  // deletes the copy's config.js — never the real scripts/lib/config.js,
+  // which other test files running concurrently under `node --test` also
+  // depend on.
+  const isolatedRoot = makeTempDir();
+  const repo = makeTempRepo();
+  try {
+    const isolatedUtil = path.join(isolatedRoot, 'scripts', 'util');
+    const isolatedLib  = path.join(isolatedRoot, 'scripts', 'lib');
+    fs.mkdirSync(isolatedUtil, { recursive: true });
+    fs.cpSync(path.join(__dirname, '..', 'lib'), isolatedLib, { recursive: true });
+    fs.cpSync(SCRIPT, path.join(isolatedUtil, 'ship-workspace-setup.js'));
+    fs.rmSync(path.join(isolatedLib, 'config.js'));
+
+    const res = spawnSync(
+      process.execPath,
+      [path.join(isolatedUtil, 'ship-workspace-setup.js'), '--workspace-flag', 'branch', '--derived-slug', 'my-thing'],
+      {
+        cwd: repo,
+        encoding: 'utf8',
+        env: { ...process.env, SDLC_STATE_DIR_OVERRIDE: path.join(repo, '.sdlc-test-state') },
+      }
+    );
+    let json = null;
+    try { json = JSON.parse(res.stdout); } catch (_) { /* left null */ }
+
+    assert.strictEqual(res.status, 2, res.stderr);
+    assert.ok(json, `expected JSON on stdout, got: ${res.stdout}`);
+    assert.strictEqual(json.status, 'error');
+    assert.strictEqual(json.error, 'Could not locate scripts/lib/config.js');
+  } finally {
+    fs.rmSync(isolatedRoot, { recursive: true, force: true });
+    fs.rmSync(repo, { recursive: true, force: true });
   }
 });

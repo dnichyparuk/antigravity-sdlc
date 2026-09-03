@@ -19,12 +19,16 @@
  *            {"changed":bool,"reason":null|"already-done"|"not-found"|"io-error","line":number|null}
  *   Usage error: {"status":"error","error":"<message>"}
  *
+ * An unrecognized flag (or stray positional) is instead reported on stderr as
+ * `Unknown parameter passed: <token>` with no stdout JSON, matching the
+ * deleted shell wrapper (openspec_wrapper.sh:30).
+ *
  * Exit codes:
  *   0 = markTaskDone ran (regardless of `changed`/`reason` — matches the
  *       shell original, which never inspected the result; the caller reads
  *       `changed`/`reason` from the JSON and treats failures as non-blocking
  *       per execute-plan-sdlc/SKILL.md Step 5d-bis)
- *   1 = user-facing validation error (missing --change/--ref)
+ *   1 = user-facing validation error (unknown flag, missing --change/--ref)
  *   2 = unexpected script crash
  *
  * Uses only Node.js built-in modules. No npm install required.
@@ -44,14 +48,15 @@ const { writeJsonLine } = require(path.join(LIB, 'output'));
 
 /**
  * @param {string[]} argv
- * @returns {{ change: string|null, ref: string|null, line: string|null, title: string|null }}
+ * @returns {{ change: string|null, ref: string|null, line: string|null, title: string|null, unknown: string|null }}
  */
 function parseArgs(argv) {
   const args = argv.slice(2);
-  let change = null;
-  let ref    = null;
-  let line   = null;
-  let title  = null;
+  let change  = null;
+  let ref     = null;
+  let line    = null;
+  let title   = null;
+  let unknown = null;
 
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -59,9 +64,10 @@ function parseArgs(argv) {
     else if (a === '--ref') ref = args[++i];
     else if (a === '--line') line = args[++i];
     else if (a === '--title') title = args[++i];
+    else { unknown = a; break; }
   }
 
-  return { change: change || null, ref: ref || null, line, title };
+  return { change: change || null, ref: ref || null, line, title, unknown };
 }
 
 // ---------------------------------------------------------------------------
@@ -95,7 +101,11 @@ function runOpenspecTaskInfo(change, ref, lineArg, titleArg, { markTaskDoneFn = 
 // ---------------------------------------------------------------------------
 
 function main(argv) {
-  const { change, ref, line, title } = parseArgs(argv);
+  const { change, ref, line, title, unknown } = parseArgs(argv);
+  if (unknown !== null) {
+    process.stderr.write(`Unknown parameter passed: ${unknown}\n`);
+    process.exit(1);
+  }
   const { json, exitCode } = runOpenspecTaskInfo(change, ref, line, title);
   writeJsonLine(json, { exitCode });
 }

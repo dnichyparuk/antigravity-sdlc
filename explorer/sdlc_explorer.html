@@ -1681,7 +1681,7 @@ openspec-task:
         agents: ['commit-orchestrator'],
         contracts: ['.sdlc/tmp/commit-manifest.json', 'Commit Message String Token'],
         contractKeys: ['commit-manifest'],
-        scripts: ['scripts/lib/git.js', 'commit-sdlc/scripts/validate_subject.sh']
+        scripts: ['scripts/lib/git.js', 'scripts/util/validate-commit-subject.js']
       },
       'review': {
         title: '5. Scatter-Gather Multi-Dimension Code Review',

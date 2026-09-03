@@ -15,12 +15,14 @@ Sub-flow of `/setup-sdlc --guardrails`. Runs skill/guardrails.js to scan the pro
 Run skill/guardrails.js:
 
 ```shell
-node "<PLUGIN_ROOT>/scripts/skill/guardrails.js" --output-file --project-root . --mode {init|add} --json
+GUARDRAILS_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/guardrails.js" --output-file --project-root . --mode {init|add} --json)
+EXIT_CODE=$?
+echo "GUARDRAILS_OUTPUT_FILE=$GUARDRAILS_OUTPUT_FILE"
 ```
 
 Replace `{init|add}` with `add` if `--add` was passed, otherwise `init`.
 
-Parse JSON output. If `errors` non-empty, show errors and stop. Store `signals`, `proposals`, and `existing`.
+Read the JSON manifest at `$GUARDRAILS_OUTPUT_FILE`. If `errors` non-empty, show errors and stop. Store `signals`, `proposals`, `existing`. Run `rm -f "$GUARDRAILS_OUTPUT_FILE"` after storing.
 
 If not in `--add` mode and `existing.count > 0`: Use AskUserQuestion: "N guardrails already configured. Replace all, or use --add to expand?" Options: replace / cancel. On cancel, stop.
 

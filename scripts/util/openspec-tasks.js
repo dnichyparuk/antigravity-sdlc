@@ -17,10 +17,13 @@
  * Output (stdout, single JSON line):
  *   Success: {"status":"success","tasks":[{ref,line,title,indent,done}, ...]}
  *   Error:   {"status":"error","error":"<message>"}
+ * An unrecognized flag (or stray positional) is instead reported on stderr as
+ * `Unknown parameter passed: <token>` with no stdout JSON, matching the
+ * deleted shell wrapper (openspec_tasks_wrapper.sh:24).
  *
  * Exit codes:
  *   0 = success
- *   1 = user-facing validation error (missing --change/--name, tasks.md not found)
+ *   1 = user-facing validation error (unknown flag, missing --change/--name, tasks.md not found)
  *   2 = unexpected script crash
  *
  * Uses only Node.js built-in modules. No npm install required.
@@ -41,20 +44,24 @@ const { writeJsonLine } = require(path.join(LIB, 'output'));
 
 /**
  * @param {string[]} argv
- * @returns {{ change: string|null }}
+ * @returns {{ change: string|null, unknown: string|null }}
  */
 function parseArgs(argv) {
   const args = argv.slice(2);
-  let change = null;
+  let change  = null;
+  let unknown = null;
 
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === '--change' || a === '--name') {
       change = args[++i];
+    } else {
+      unknown = a;
+      break;
     }
   }
 
-  return { change: change || null };
+  return { change: change || null, unknown };
 }
 
 // ---------------------------------------------------------------------------
@@ -93,7 +100,11 @@ function runOpenspecTasks(cwd, change, {
 // ---------------------------------------------------------------------------
 
 function main(argv) {
-  const { change } = parseArgs(argv);
+  const { change, unknown } = parseArgs(argv);
+  if (unknown !== null) {
+    process.stderr.write(`Unknown parameter passed: ${unknown}\n`);
+    process.exit(1);
+  }
   const { json, exitCode } = runOpenspecTasks(process.cwd(), change);
   writeJsonLine(json, { exitCode });
 }

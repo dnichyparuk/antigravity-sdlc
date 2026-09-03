@@ -2,17 +2,26 @@
 
 const test   = require('node:test');
 const assert = require('node:assert/strict');
+const path   = require('node:path');
+const { spawnSync } = require('node:child_process');
 
 const { parseArgs, runOpenspecTaskInfo } = require('./openspec-task-info');
 
+const SCRIPT = path.join(__dirname, 'openspec-task-info.js');
+
 test('parseArgs: --change --ref --line --title as ordinary flags (Key Decision 1)', () => {
   const result = parseArgs(['node', 'openspec-task-info.js', '--change', 'add-widget', '--ref', 'ref-abc123', '--line', '12', '--title', 'Do the thing']);
-  assert.deepEqual(result, { change: 'add-widget', ref: 'ref-abc123', line: '12', title: 'Do the thing' });
+  assert.deepEqual(result, { change: 'add-widget', ref: 'ref-abc123', line: '12', title: 'Do the thing', unknown: null });
 });
 
 test('parseArgs: only --change and --ref given -> line/title are null', () => {
   const result = parseArgs(['node', 'openspec-task-info.js', '--change', 'add-widget', '--ref', 'ref-abc123']);
-  assert.deepEqual(result, { change: 'add-widget', ref: 'ref-abc123', line: null, title: null });
+  assert.deepEqual(result, { change: 'add-widget', ref: 'ref-abc123', line: null, title: null, unknown: null });
+});
+
+test('parseArgs: unrecognized flag is captured as unknown', () => {
+  const result = parseArgs(['node', 'openspec-task-info.js', '--chnage', 'foo']);
+  assert.deepEqual(result, { change: null, ref: null, line: null, title: null, unknown: '--chnage' });
 });
 
 test('runOpenspecTaskInfo: success path — delegates to markTaskDone with numeric line and title', () => {
@@ -66,6 +75,14 @@ test('runOpenspecTaskInfo: error path — missing --change', () => {
   assert.equal(exitCode, 1);
   assert.equal(json.status, 'error');
   assert.match(json.error, /--change and --ref are required/);
+});
+
+test('CLI: unknown flag (--chnage typo) exits 1 with the unknown-parameter message on stderr, not the misleading --change-required error', () => {
+  const res = spawnSync(process.execPath, [SCRIPT, '--chnage', 'foo'], { encoding: 'utf8' });
+
+  assert.equal(res.status, 1);
+  assert.match(res.stderr, /Unknown parameter passed: --chnage/);
+  assert.equal(res.stdout, '');
 });
 
 test('runOpenspecTaskInfo: error path — missing --ref', () => {
