@@ -290,12 +290,22 @@ const STASH_MESSAGE = 'commit-sdlc: temp stash';
 /**
  * Ordered signature table for classifying a failed `git commit`'s stderr/stdout.
  * Evaluated top-to-bottom in `classifyCommitFailure` — first match wins.
+ *
+ * Every entry here is `anchored: true` — wording specific to git's own
+ * identity/gpg errors, GitHub's `remote:`-prefixed protected-branch
+ * rejections (or `GH006`), and "nothing to commit" wording. None of this is
+ * wording a pre-commit hook would plausibly print on its own, which is why
+ * these signatures are allowed to override `hookPresent` — see
+ * `classifyCommitFailure`. Looser wording (bare "user.email", bare
+ * "protected branch") is deliberately NOT in this table: a hook could print
+ * either for unrelated reasons, so it is left to fall through to the
+ * `hookPresent`-driven classification instead.
  */
 const FAILURE_SIGNATURES = [
-  { re: /Author identity unknown|Please tell me who you are|user\.(name|email)/i, classification: 'identity', hookFailed: false },
-  { re: /gpg failed to sign|signing failed|error: gpg/i, classification: 'gpg', hookFailed: false },
-  { re: /nothing to commit|no changes added to commit/i, classification: 'nothing-to-commit', hookFailed: false },
-  { re: /protected branch|pre-receive hook declined/i, classification: 'protected-branch', hookFailed: false },
+  { re: /^\*\*\* Please tell me who you are|Author identity unknown|^fatal: (empty ident|unable to auto-detect email)/im, classification: 'identity', hookFailed: false, anchored: true },
+  { re: /gpg failed to sign|signing failed|error: gpg/i, classification: 'gpg', hookFailed: false, anchored: true },
+  { re: /nothing to commit|no changes added to commit|nothing added to commit but untracked files present/i, classification: 'nothing-to-commit', hookFailed: false, anchored: true },
+  { re: /^remote: .*(protected branch|pre-receive hook declined)|GH006/im, classification: 'protected-branch', hookFailed: false, anchored: true },
 ];
 
 /** Human-readable `reason` string per classification, for the failure JSON. */
@@ -313,10 +323,17 @@ const CLASSIFICATION_REASONS = {
  * Classify a failed `git commit`'s stderr/stdout into one of the taxonomy's
  * buckets. Pure function — no I/O.
  *
- * Signature matches (identity/gpg/nothing-to-commit/protected-branch) always
- * win regardless of `hookPresent`, since those failures are never actually a
- * pre-commit hook. When no signature matches, `hookPresent` (from
- * `detectPreCommitHook`, derived once before the commit attempt) decides:
+ * Only *anchored* signatures (git's own identity/gpg wording, `remote:`-
+ * prefixed protected-branch rejections, nothing-to-commit) override
+ * `hookPresent`. When a pre-commit hook is present and nothing anchored
+ * matches, the failure is the hook's — even if its output happens to contain
+ * words like "user.email" or "protected branch"; a false 'hook'
+ * classification is safer than a false non-hook one, since the former keeps
+ * stash-recovery guidance (see `runStashTransaction` below) while the latter
+ * would suppress it. When no hook is present and nothing matches,
+ * classification is 'other'. When hook presence is unknown, classification
+ * is 'ambiguous'. `hookPresent` (from `detectPreCommitHook`, derived once
+ * before the commit attempt) decides the no-match outcome:
  *   - `hookPresent === true`      -> classification 'hook', hookFailed: true
  *   - `hookPresent === false`     -> classification 'other', hookFailed: false
  *   - `hookPresent` undefined/null -> classification 'ambiguous', hookFailed: true
@@ -329,6 +346,7 @@ const CLASSIFICATION_REASONS = {
 function classifyCommitFailure(detail, { hookPresent } = {}) {
   const text = detail || '';
   for (const sig of FAILURE_SIGNATURES) {
+    if (!sig.anchored && hookPresent !== false) continue;
     if (sig.re.test(text)) {
       return { hookFailed: sig.hookFailed, classification: sig.classification };
     }

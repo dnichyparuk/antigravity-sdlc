@@ -59,14 +59,26 @@ function parseArgs(argv) {
   return args;
 }
 
-function readStdin() {
+function readStdin(stream = process.stdin) {
   return new Promise((resolve, reject) => {
     let buf = '';
-    process.stdin.setEncoding('utf8');
-    process.stdin.on('data', (c) => { buf += c; });
-    process.stdin.on('end', () => resolve(buf));
-    process.stdin.on('error', reject);
-    process.stdin.resume();
+    stream.setEncoding('utf8');
+
+    const onData = (c) => { buf += c; };
+    const onEnd = () => settle(() => resolve(buf));
+    const onError = (err) => settle(() => reject(err));
+
+    function settle(action) {
+      stream.removeListener('data', onData);
+      stream.removeListener('end', onEnd);
+      stream.removeListener('error', onError);
+      action();
+    }
+
+    stream.on('data', onData);
+    stream.on('end', onEnd);
+    stream.on('error', onError);
+    stream.resume();
   });
 }
 
@@ -136,4 +148,4 @@ async function runValidateLinksCli(argv, deps = {}) {
   return 1;
 }
 
-module.exports = { runValidateLinksCli, parseArgs };
+module.exports = { runValidateLinksCli, parseArgs, readStdin };

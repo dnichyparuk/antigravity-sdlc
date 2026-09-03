@@ -2,8 +2,9 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
+const { PassThrough } = require('node:stream');
 
-const { runValidateLinksCli, parseArgs } = require('./validate-links-cli');
+const { runValidateLinksCli, parseArgs, readStdin } = require('./validate-links-cli');
 
 function fakeStream() {
   const chunks = [];
@@ -109,4 +110,15 @@ test('runValidateLinksCli: end-to-end against the real links.js validator (no mo
   });
   assert.strictEqual(code, 1);
   assert.match(stderr.text(), /url-invalid/);
+});
+
+test('readStdin: removes its data/end/error listeners from the stream on settle', async () => {
+  const stream = new PassThrough();
+  const promise = readStdin(stream);
+  stream.end('hello world');
+  const result = await promise;
+  assert.strictEqual(result, 'hello world');
+  assert.strictEqual(stream.listenerCount('data'), 0);
+  assert.strictEqual(stream.listenerCount('end'), 0);
+  assert.strictEqual(stream.listenerCount('error'), 0);
 });

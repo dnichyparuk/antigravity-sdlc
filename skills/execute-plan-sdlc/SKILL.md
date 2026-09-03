@@ -188,7 +188,7 @@ When ship-sdlc invokes execute-plan-sdlc inside the ship pipeline, `--branch` is
        --derived-slug "<derived-slug>" \
        [--branch-name "<custom-branch-name>"])
      ```
-     Parse the JSON output. Extract `executeBranch` and `worktreePath`.
+     Parse the JSON output. If `status` is `"error"`, print `error` verbatim and halt — do not proceed with undefined branch/worktree values. Extract `executeBranch` and `worktreePath`.
      If `worktreePath` is set (non-empty), the LLM must explicitly use `worktreePath` as the current working directory (`Cwd` parameter) for all subsequent shell commands and tool dispatches. If `worktreePath` is empty, continue using the current workspace directory.
 4. If the current branch is NOT the default branch, skip this check entirely — no warning, no prompt. `EXECUTE_NEW_BRANCH` and `WORKTREE_PATH` remain unset.
 
@@ -531,6 +531,7 @@ When `commitWaves === true`:
 2. Branch on the JSON output:
    - `{"committed": false, "sha": null, "softSuccess": true}` — soft-success path, empty diff (nothing to commit, e.g., wave was a no-op or every produced change was reverted by a hook). Surface a one-line notice: `Wave N produced no diff — no WIP commit recorded.` Persist `committedSha: null` via the state write below by omitting `--sha` (or passing `--sha ""`).
    - `{"committed": true, "sha": "<sha>", "softSuccess": false}` — success path, commit landed. Pass `sha` straight into the unchanged state handoff.
+   - `{"committed": false, "reason": "empty wave title"}` (exit 1) — wave-runner produced no titles; treat as a wave-level hard failure with that reason, distinct from the hook-failure exit 1 above (distinguish by presence of `reason`).
 
 3. Persist via the state subcommand:
    ```bash

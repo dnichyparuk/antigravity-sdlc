@@ -144,13 +144,101 @@ test('sourceParsesFlag treats --output-file as the manifest protocol selector', 
   assert.strictEqual(sourceParsesFlag(JSON_LINE_SRC, '--output-file'), false);
 });
 
-test('isPassthroughWrapper detects an argv tail spread into a child process', () => {
+test('isPassthroughWrapper detects an argv tail spread in the SAME function body', () => {
   const src = `
-function parseArgs(argv) { return { forwardArgs: argv.slice(2) }; }
-spawnSync('gh', ['pr', 'create', ...forwardArgs]);
+function main(argv) {
+  const forwardArgs = argv.slice(2);
+  spawnSync('gh', ['pr', 'create', ...forwardArgs]);
+}
 `;
   assert.strictEqual(isPassthroughWrapper(src), true);
   assert.strictEqual(isPassthroughWrapper("const args = argv.slice(2); if (args[0] === '--x') {}"), false);
+});
+
+test('isPassthroughWrapper follows a returned binding destructured by name into its caller', () => {
+  // Mirrors the real shape used by util/verify-pipeline.js, util/await-review.js,
+  // util/create-pr.js and util/plan-mode-check.js.
+  const src = `
+function parseArgs(argv) { return { forwardArgs: argv.slice(2) }; }
+function run(argv) {
+  const { forwardArgs } = parseArgs(argv);
+  spawnSync('gh', ['pr', 'create', ...forwardArgs]);
+}
+`;
+  assert.strictEqual(isPassthroughWrapper(src), true);
+});
+
+test('isPassthroughWrapper does not follow the destructuring bridge for an unrelated call', () => {
+  // The caller destructures `forwardArgs` from a DIFFERENT function than the
+  // one that binds it from argv — no bridge, no match.
+  const src = `
+function parseArgs(argv) { return { forwardArgs: argv.slice(2) }; }
+function other() { return { forwardArgs: ['unrelated'] }; }
+function run() {
+  const { forwardArgs } = other();
+  spawnSync('gh', ['pr', 'create', ...forwardArgs]);
+}
+`;
+  assert.strictEqual(isPassthroughWrapper(src), false);
+});
+
+test('isPassthroughWrapper rejects a same-named binding shadowed in an unrelated scope', () => {
+  // The plan.js false positive this scope-aware check exists to fix:
+  // plan.js:58 binds `args` from argv.slice(2) inside parseArgs, but the
+  // `...args` spread inside runExplorePack's spawnSync call is an UNRELATED
+  // local `const args = ['--output-file']` — a file-wide scan cannot tell
+  // these apart; a scope-aware one must.
+  const src = `
+function parseArgs(argv) {
+  const args = argv.slice(2);
+  return { args };
+}
+function runExplorePack() {
+  const args = ['--output-file'];
+  spawnSync(process.execPath, [exploreScript, ...args], {});
+}
+`;
+  assert.strictEqual(isPassthroughWrapper(src), false);
+});
+
+test('isPassthroughWrapper does not match a spread whose name only shares a prefix', () => {
+  const src = `
+function main(argv) {
+  const args = argv.slice(2);
+  const argsExtra = ['other'];
+  spawnSync('gh', ['pr', ...argsExtra]);
+}
+`;
+  assert.strictEqual(isPassthroughWrapper(src), false);
+});
+
+test('isPassthroughWrapper rejects a property spread off the binding, not the binding itself', () => {
+  // `...args.warnings` spreads a PROPERTY of args, not args itself.
+  const src = `
+function main(argv) {
+  const args = argv.slice(2);
+  spawnSync('gh', ['pr', ...args.warnings]);
+}
+`;
+  assert.strictEqual(isPassthroughWrapper(src), false);
+});
+
+test('isPassthroughWrapper rejects a spread inside a non-spawn array literal', () => {
+  const src = `
+function main(argv) {
+  const args = argv.slice(2);
+  const other = ['x', ...args];
+  console.log(other);
+}
+`;
+  assert.strictEqual(isPassthroughWrapper(src), false);
+});
+
+test('isPassthroughWrapper returns false for the real plan.js and version.js sources', () => {
+  const planSrc = fs.readFileSync(path.join(REPO_ROOT, 'scripts/skill/plan.js'), 'utf8');
+  const versionSrc = fs.readFileSync(path.join(REPO_ROOT, 'scripts/skill/version.js'), 'utf8');
+  assert.strictEqual(isPassthroughWrapper(planSrc), false);
+  assert.strictEqual(isPassthroughWrapper(versionSrc), false);
 });
 
 // ---------------------------------------------------------------------------
@@ -201,7 +289,10 @@ test('checkInvocation reports unknown-flag for a flag the script never parses', 
 test('checkInvocation skips the flag check for a passthrough wrapper', () => {
   const src = `
 function parseArgs(argv) { return { forwardArgs: argv.slice(2) }; }
-spawnSync('gh', ['pr', 'create', ...forwardArgs]);
+function run(argv) {
+  const { forwardArgs } = parseArgs(argv);
+  spawnSync('gh', ['pr', 'create', ...forwardArgs]);
+}
 `;
   const out = checkInvocation(inv({ flags: ['--title', '--body'] }), src);
   assert.deepStrictEqual(out, []);
@@ -396,4 +487,20 @@ test('the checker actually scans a non-trivial number of real invocations', () =
 test('running the CLI against the real tree exits 0', () => {
   const r = run([]);
   assert.strictEqual(r.status, 0, r.stderr);
+});
+
+test('the checker reports unknown-flag for a bogus flag on scripts/skill/plan.js', () => {
+  // Regression guard for the isPassthroughWrapper false positive plan.js used
+  // to trigger: before the scope-aware rewrite, plan.js was (wrongly) treated
+  // as a passthrough wrapper, so its flag check was skipped entirely and a
+  // bogus flag reported nothing.
+  const planSrc = fs.readFileSync(path.join(REPO_ROOT, 'scripts/skill/plan.js'), 'utf8');
+  const dir = makeTree({
+    'scripts/skill/plan.js': planSrc,
+    'skills/a/SKILL.md': 'node "<PLUGIN_ROOT>/scripts/skill/plan.js" --totally-bogus-flag\n',
+  });
+  const r = run(['--root', dir]);
+  assert.strictEqual(r.status, 1);
+  assert.match(r.stderr, /unknown-flag/);
+  assert.match(r.stderr, /--totally-bogus-flag/);
 });

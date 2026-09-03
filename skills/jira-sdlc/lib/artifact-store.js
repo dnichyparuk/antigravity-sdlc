@@ -9,7 +9,7 @@
  *
  * Before dispatching a write MCP call, the LLM re-derives <hash> from the
  * final `tool_input` and verifies both files exist with mtime < TTL_MS, then
- * consumes (deletes) them on success. There is no PreToolUse hook backstop —
+ * consumes (deletes) them on success. There is no hook backstop —
  * `hooks/pre-tool-jira-write-guard.js` does not exist and is not registered in
  * `hooks.json`; this check is the skill's own (see SKILL.md Step 3). Atomic
  * writes (tmp+rename) so a reader never sees a partial file.

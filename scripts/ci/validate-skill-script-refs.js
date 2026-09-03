@@ -486,16 +486,279 @@ function flagsFromFunctionName(name) {
 }
 
 /**
+ * Replace string, template-literal, regex-literal and comment content with
+ * spaces (same length, line breaks preserved) so the brace/paren-balanced
+ * scans below never treat a delimiter embedded in one of those spans as real
+ * code. Regex-vs-division is disambiguated by the preceding significant
+ * character, the same shortcut lightweight JS tokenizers use — good enough
+ * to stop stray punctuation from skewing a boundary scan; it does not need
+ * to be a correct tokenizer. Still textual, not an AST.
+ */
+function maskNonCode(source) {
+  const chars = source.split('');
+  const n = chars.length;
+  const REGEX_PRECEDERS = /^[([{,;:=&|!?+\-*/%^~<>]$/;
+  let i = 0;
+  let lastSignificant = '';
+
+  const blankRange = (start, end) => {
+    for (let k = start; k < end; k++) {
+      if (chars[k] !== '\n') chars[k] = ' ';
+    }
+  };
+
+  while (i < n) {
+    const ch = source[i];
+
+    if (ch === '/' && source[i + 1] === '/') {
+      let j = source.indexOf('\n', i);
+      if (j === -1) j = n;
+      blankRange(i, j);
+      i = j;
+      continue;
+    }
+
+    if (ch === '/' && source[i + 1] === '*') {
+      let j = source.indexOf('*/', i + 2);
+      j = j === -1 ? n : j + 2;
+      blankRange(i, j);
+      i = j;
+      continue;
+    }
+
+    // Single/double-quoted strings and template literals (the latter blanked
+    // WHOLESALE, `${...}` interpolation included — a spread inside a
+    // template expression is a false negative we accept, not a false
+    // positive we risk).
+    if (ch === "'" || ch === '"' || ch === '`') {
+      const quote = ch;
+      let j = i + 1;
+      while (j < n && source[j] !== quote) {
+        j += source[j] === '\\' ? 2 : 1;
+      }
+      j = Math.min(j + 1, n);
+      blankRange(i, j);
+      i = j;
+      lastSignificant = quote;
+      continue;
+    }
+
+    if (ch === '/' && (!lastSignificant || REGEX_PRECEDERS.test(lastSignificant))) {
+      let j = i + 1;
+      let inClass = false;
+      let closed = false;
+      while (j < n && source[j] !== '\n') {
+        if (source[j] === '\\') { j += 2; continue; }
+        if (source[j] === '[') inClass = true;
+        else if (source[j] === ']') inClass = false;
+        else if (source[j] === '/' && !inClass) { closed = true; break; }
+        j++;
+      }
+      if (closed) {
+        let end = j + 1;
+        while (end < n && /[a-z]/i.test(source[end])) end++;
+        blankRange(i, end);
+        i = end;
+        lastSignificant = '/';
+        continue;
+      }
+    }
+
+    if (!/\s/.test(ch)) lastSignificant = ch;
+    i++;
+  }
+
+  return chars.join('');
+}
+
+/** Escape a literal identifier for interpolation into a `new RegExp(...)`. */
+function escapeForRegExp(name) {
+  return name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Forward brace-balanced scan: index just past the `}` that closes `{` at `openIdx`. */
+function findMatchingBraceForward(masked, openIdx) {
+  let depth = 0;
+  for (let i = openIdx; i < masked.length; i++) {
+    if (masked[i] === '{') depth++;
+    else if (masked[i] === '}') {
+      depth--;
+      if (depth === 0) return i + 1;
+    }
+  }
+  return masked.length;
+}
+
+/** Backward paren-balanced scan: index of the `(` that opens the `)` at `closeIdx`, or -1. */
+function findMatchingParenBackward(masked, closeIdx) {
+  let depth = 0;
+  for (let i = closeIdx; i >= 0; i--) {
+    if (masked[i] === ')') depth++;
+    else if (masked[i] === '(') {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/** Forward paren-balanced scan: index of the `)` that closes `(` at `openIdx`, or -1. */
+function findMatchingParenForward(masked, openIdx) {
+  let depth = 0;
+  for (let i = openIdx; i < masked.length; i++) {
+    if (masked[i] === '(') depth++;
+    else if (masked[i] === ')') {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * Is the brace at `openIdx` a FUNCTION body opener — `function ... (...) {`,
+ * a method/constructor `name(...) {`, or an arrow `(...) => {` / `x => {` —
+ * as opposed to a control-flow block (`if`/`for`/`while`/`switch`/`catch`),
+ * an object literal, or a bare block? Only the token(s) immediately before
+ * the brace are inspected.
+ */
+function isFunctionOpenBrace(masked, openIdx) {
+  let j = openIdx - 1;
+  while (j >= 0 && /\s/.test(masked[j])) j--;
+  if (j < 0) return false;
+  if (masked[j] === '>' && masked[j - 1] === '=') return true; // `=> {`
+  if (masked[j] !== ')') return false;
+  const openParen = findMatchingParenBackward(masked, j);
+  if (openParen === -1) return false;
+  let k = openParen - 1;
+  while (k >= 0 && /\s/.test(masked[k])) k--;
+  const idEnd = k + 1;
+  let idStart = idEnd;
+  while (idStart > 0 && /[\w$]/.test(masked[idStart - 1])) idStart--;
+  const keyword = masked.slice(idStart, idEnd);
+  return !['if', 'for', 'while', 'switch', 'catch'].includes(keyword);
+}
+
+/**
+ * The declared name of the function whose body opens at `openIdx`
+ * (`function NAME(` or a method/shorthand `NAME(`), or `null` when the
+ * opener has no such name (an arrow function, an anonymous `function`
+ * expression, or no enclosing function at all).
+ */
+function enclosingFunctionName(masked, openIdx) {
+  let j = openIdx - 1;
+  while (j >= 0 && /\s/.test(masked[j])) j--;
+  if (j < 0 || masked[j] !== ')') return null;
+  const openParen = findMatchingParenBackward(masked, j);
+  if (openParen === -1) return null;
+  let k = openParen - 1;
+  while (k >= 0 && /\s/.test(masked[k])) k--;
+  const idEnd = k + 1;
+  let idStart = idEnd;
+  while (idStart > 0 && /[\w$]/.test(masked[idStart - 1])) idStart--;
+  return masked.slice(idStart, idEnd) || null;
+}
+
+/**
+ * Smallest enclosing function body containing `pos`: `[start, end)` where
+ * `start` is the body's opening `{` and `end` is just past its matching `}`.
+ * Climbs past non-function blocks (`if`, object literals, bare blocks, …) to
+ * their own enclosing brace. When `pos` is not nested inside any function,
+ * the whole source is the body — the "treat top-level as one body" case.
+ */
+function bodySpanAt(masked, pos) {
+  let depth = 0;
+  let openIdx = -1;
+  for (let i = pos - 1; i >= 0; i--) {
+    const ch = masked[i];
+    if (ch === '}') depth++;
+    else if (ch === '{') {
+      if (depth === 0) { openIdx = i; break; }
+      depth--;
+    }
+  }
+  if (openIdx === -1) return [0, masked.length];
+  if (isFunctionOpenBrace(masked, openIdx)) {
+    return [openIdx, findMatchingBraceForward(masked, openIdx)];
+  }
+  return bodySpanAt(masked, openIdx);
+}
+
+/**
+ * Body spans in which `name` may legitimately still hold the `argv.slice(2)`
+ * value: the binding's own enclosing function body, PLUS — when that
+ * function is itself named and its return value is destructured elsewhere
+ * under the SAME name (`const { forwardArgs } = parseArgs(...)`, matching
+ * the `return { forwardArgs: argv.slice(2) }` shape the repo's
+ * spawn-forwarding wrappers use — `util/verify-pipeline.js`,
+ * `util/await-review.js`, `util/create-pr.js`, `util/plan-mode-check.js`) —
+ * the enclosing body of each such call site. One hop only; deliberately does
+ * not chase further indirection.
+ */
+function candidateBodies(masked, bindingPos, name) {
+  const own = bodySpanAt(masked, bindingPos);
+  const bodies = [own];
+
+  const fnName = enclosingFunctionName(masked, own[0]);
+  if (!fnName) return bodies;
+
+  const destructureRe = new RegExp(
+    `(?:const|let|var)\\s*\\{[^}]*\\b${escapeForRegExp(name)}\\b[^}]*\\}\\s*=\\s*${escapeForRegExp(fnName)}\\s*\\(`,
+    'g'
+  );
+  let dm;
+  while ((dm = destructureRe.exec(masked)) !== null) {
+    bodies.push(bodySpanAt(masked, dm.index));
+  }
+  return bodies;
+}
+
+/**
+ * Does a `spawn*`/`exec*`/`fork(` call starting within `[bodyStart, bodyEnd)`
+ * pass `...name` inside its argument list?
+ */
+function spreadInSpawnCall(masked, source, name, bodyStart, bodyEnd) {
+  const callRe = /\b(?:spawn\w*|exec\w*|fork)\s*\(/g;
+  callRe.lastIndex = bodyStart;
+  const spreadRe = new RegExp(`\\.\\.\\.${escapeForRegExp(name)}(?![\\w$.])`);
+  let m;
+  while ((m = callRe.exec(masked)) !== null) {
+    if (m.index >= bodyEnd) break;
+    const openParen = m.index + m[0].length - 1;
+    const closeParen = findMatchingParenForward(masked, openParen);
+    if (closeParen === -1) continue;
+    const argText = source.slice(openParen + 1, closeParen);
+    if (spreadRe.test(argText)) return true;
+  }
+  return false;
+}
+
+/**
  * Is this script a transparent passthrough wrapper — one that hands its whole
  * argv tail to another process (`gh`, or a sibling script) without inspecting
  * it? Those legitimately do not name any of the flags they receive.
- * Detected as: a binding assigned `argv.slice(2)` that is later spread.
+ *
+ * Detected as: a binding `X = argv.slice(2)` (or `X: argv.slice(2)` inside a
+ * returned object) whose value reaches a `...X` spread inside a
+ * `spawn*`/`exec*`/`fork(` argument list, WITHIN THE SAME enclosing function
+ * body — or, for the returned-object shape, within a caller that destructures
+ * that exact property straight off a call to the binding's own function (see
+ * `candidateBodies`). A file-wide substring match is not enough: two
+ * same-named bindings in unrelated scopes (one deriving from argv, one not)
+ * must not be conflated — `plan.js`'s `parseArgs` binds `args` from
+ * `argv.slice(2)`, but the `...args` spread inside `runExplorePack`'s
+ * `spawnSync` call is an UNRELATED local `const args = ['--output-file']`;
+ * only scope-aware matching tells them apart.
  */
 function isPassthroughWrapper(source) {
-  const re = /([A-Za-z_$][\w$]*)\s*[:=]\s*(?:process\.)?argv\.slice\(2\)/g;
+  const masked = maskNonCode(source);
+  const bindingRe = /([A-Za-z_$][\w$]*)\s*[:=]\s*(?:process\.)?argv\.slice\(2\)/g;
   let m;
-  while ((m = re.exec(source)) !== null) {
-    if (source.includes(`...${m[1]}`)) return true;
+  while ((m = bindingRe.exec(masked)) !== null) {
+    const name = m[1];
+    for (const [start, end] of candidateBodies(masked, m.index, name)) {
+      if (spreadInSpawnCall(masked, source, name, start, end)) return true;
+    }
   }
   return false;
 }

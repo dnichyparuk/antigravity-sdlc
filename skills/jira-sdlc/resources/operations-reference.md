@@ -71,7 +71,7 @@ conditionally after Step 2 classifies the operation type.
    - On `cancel`: abort — do not dispatch
 
 7. Dispatch — call mcp__atlassian__createJiraIssue with contentFormat: "markdown"
-   - Before dispatch, re-derive the hash from the final `tool_input` and confirm both artifacts exist for it — there is no PreToolUse hook; this check is yours
+   - Before dispatch, re-derive the hash from the final `tool_input` and confirm both artifacts exist for it — no hook backstop exists; this check is yours
    - On 400 error: check fieldSchemas for the issue type; verify field shapes from
      REFERENCE.md Section 2
 

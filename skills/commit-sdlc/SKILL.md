@@ -236,13 +236,6 @@ After completing a commit, if the project's detected commit style was non-conven
 <what was learned about this project's commit style or any edge case encountered>
 ```
 
-## What's Next
-
-After completing the commit, common follow-ups include:
-- `/review-sdlc` — review the changes
-- `/version-sdlc` — tag a release
-- `/pr-sdlc` — create a pull request
-
 ## See Also
 
 - [`/review-sdlc`](../review-sdlc/SKILL.md) — review changes after committing

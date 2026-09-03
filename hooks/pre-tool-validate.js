@@ -2,6 +2,19 @@
 /**
  * pre-tool-validate.js
  * PreToolUse hook — "Shift-Left" validation of edited files before they are written.
+ *
+ * Host: Antigravity (https://antigravity.google/docs/hooks/). This repo is an
+ * Antigravity-native plugin — hooks.json registers this hook against Antigravity
+ * tool-call matchers (`write_to_file|replace_file_content|...`), so the payload
+ * read from stdin is the Antigravity shape
+ * `{ toolCall: { name, args: { TargetFile, CodeContent } } }` and the output
+ * written to stdout is `{ decision, reason }`. The legacy `args.Target` /
+ * `args.Content` fields are still read as fallbacks (harmless, kept for
+ * backward compatibility) but are not the primary path. Claude Code's
+ * payload/output shapes — `{ tool_name, tool_input: { file_path, content } }`
+ * input and `hookSpecificOutput` output — are intentionally NOT supported
+ * here; adding a second input shape would risk a half-ported guard that fails
+ * open on one host.
  */
 
 'use strict';

@@ -2,6 +2,17 @@
 /**
  * pre-tool-git-guard.js
  * PreToolUse hook — intercepts dangerous git commands before execution.
+ *
+ * Host: Antigravity (https://antigravity.google/docs/hooks/). This repo is an
+ * Antigravity-native plugin — hooks.json registers this hook against Antigravity
+ * tool-call matchers (`run_command`), so the payload read from stdin is the
+ * Antigravity shape `{ toolCall: { name, args: { CommandLine } } }` and the
+ * output written to stdout is `{ decision, reason }`. The legacy `args.command`
+ * field is still read as a fallback (harmless, kept for backward compatibility)
+ * but is not the primary path. Claude Code's payload/output shapes —
+ * `{ tool_name, tool_input: { command } }` input and `hookSpecificOutput`
+ * output — are intentionally NOT supported here; adding a second input shape
+ * would risk a half-ported guard that fails open on one host.
  */
 
 'use strict';

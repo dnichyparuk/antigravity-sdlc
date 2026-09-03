@@ -68,13 +68,26 @@ function parseArgs(argv) {
  * Read all of stdin as a UTF-8 string.
  * @returns {Promise<string>}
  */
-function readStdin() {
+function readStdin(stream = process.stdin) {
   return new Promise((resolve, reject) => {
     let data = '';
-    process.stdin.setEncoding('utf8');
-    process.stdin.on('data', (chunk) => { data += chunk; });
-    process.stdin.on('end', () => resolve(data));
-    process.stdin.on('error', reject);
+    stream.setEncoding('utf8');
+
+    const onData = (chunk) => { data += chunk; };
+    const onEnd = () => settle(() => resolve(data));
+    const onError = (err) => settle(() => reject(err));
+
+    function settle(action) {
+      stream.removeListener('data', onData);
+      stream.removeListener('end', onEnd);
+      stream.removeListener('error', onError);
+      action();
+    }
+
+    stream.on('data', onData);
+    stream.on('end', onEnd);
+    stream.on('error', onError);
+    stream.resume();
   });
 }
 

@@ -439,7 +439,7 @@ node "<PLUGIN_ROOT>/scripts/util/worktree-lifecycle.js" resolve --branch <resume
 Assign `PLAN_FILE` from `extract-plan-file.js`. **This script does NOT print the plan path — it prints the path of a temp JSON manifest** (scripts never write raw JSON to stdout). Run it, then read the manifest it names and take `.planFile`:
 
 ```shell
-EXTRACT_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/util/extract-plan-file.js" "$SHIP_PREPARE_OUTPUT_FILE")
+EXTRACT_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/util/extract-plan-file.js" "$PREPARE_OUTPUT_FILE")
 ```
 > **Contract (Input/Output):**
 > - **Input**: One positional argument — the prepare output file path.
@@ -447,7 +447,7 @@ EXTRACT_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/util/extract-plan-file.js" "$S
 
 Read `$EXTRACT_OUTPUT_FILE`, parse it, and set `PLAN_FILE` to its `.planFile` value. If `ok` is `false`, surface `errors[]` and stop. Then run `rm -f "$EXTRACT_OUTPUT_FILE"` to clean up the temp output file.
 
-Where `$SHIP_PREPARE_OUTPUT_FILE` is the path to the temp file holding the `skill/ship.js` JSON output. When `PLAN_FILE` is empty, the `ship-todos.js` execute event will fail. Surface that error before dispatching.
+Where `$PREPARE_OUTPUT_FILE` is the path to the temp file holding the `skill/ship.js` JSON output. When `PLAN_FILE` is empty, the `ship-todos.js` execute event will fail. Surface that error before dispatching.
 
 Before dispatching `execute-plan-sdlc`, run:
 
@@ -734,6 +734,8 @@ This is a pipeline bug — all will_run steps must be dispatched.
 Do NOT proceed to the success summary. The pipeline did not complete correctly.
 
 The cleanup step ALWAYS runs, even on failure paths — orphaned state files from interrupted runs are pruned regardless of whether the current pipeline succeeded.
+
+Run `rm -f "$PREPARE_OUTPUT_FILE"` to clean up the temp output file. Unlike the other temp output files (each read once and cleaned up immediately after), `$PREPARE_OUTPUT_FILE` is re-read throughout the pipeline, so it is cleaned up only here, at the very end.
 
 ---
 

@@ -79,10 +79,42 @@ const WORKTREE_CREATE_SCRIPT = path.join(__dirname, 'worktree-create.js');
 // CLI argument parsing
 // ---------------------------------------------------------------------------
 
+// Usage text — one line per flag `parseArgs` accepts below, kept in the same
+// order as the parsing branches so the two cannot drift apart.
+const USAGE = [
+  'Usage: node ship-workspace-setup.js \\',
+  '  --workspace-flag <branch|worktree|continue> \\',
+  '  --prepare-output-file <path> \\',
+  '  --logical-type <string> \\',
+  '  --derived-slug <string>',
+  '',
+  'Unified workspace setup for the ship-sdlc pipeline: resolves the workspace',
+  'mode, guards against shipping on the default branch, checks the cwd against',
+  'the prepare manifest, resolves the execute branch name, migrates ship state',
+  'when the branch changed, then checks out the branch or creates a worktree.',
+  '',
+  'Options:',
+  '  --workspace-flag <mode>       branch|worktree|continue (else workspace.mode from .sdlc/local.json)',
+  '  --prepare-output-file <path>  prepare-step manifest read for cwd assertions',
+  '  --logical-type <string>       branch-name type segment (default: feature)',
+  '  --derived-slug <string>       branch-name slug segment (default: feature-branch)',
+  '  --help, -h                    show this help and exit',
+  '',
+  'Output (stdout, single JSON line):',
+  '  Success: {"status":"success","workspaceMode":..,"executeBranch":..,"worktreePath":..}',
+  '  Error:   {"status":"error","error":"<message>"}',
+  '',
+  'Exit codes: 0 = success, 1 = validation error, 2 = unexpected crash',
+].join('\n') + '\n';
+
 /**
  * Parse the four workspace-setup flags. Mirrors the shell `while`/`case` loop:
  * a missing value yields an empty string, and the first unrecognised token
  * aborts parsing (the shell exited immediately on `Unknown parameter passed`).
+ *
+ * `--help`/`-h` is handled inline, bypassing the JSON protocol entirely (same
+ * shape as `scripts/lib/links.js` and `scripts/lib/ship-todos.js`): it prints
+ * usage to stdout and exits 0 before any other flag is parsed.
  *
  * @param {string[]} argv  Full argv (process.argv shape).
  * @returns {{workspaceFlag:string, prepareOutputFile:string, logicalType:string, derivedSlug:string, unknown:string|null}}
@@ -107,6 +139,9 @@ function parseArgs(argv) {
       parsed.logicalType = args[++i] || '';
     } else if (a === '--derived-slug') {
       parsed.derivedSlug = args[++i] || '';
+    } else if (a === '--help' || a === '-h') {
+      process.stdout.write(USAGE);
+      process.exit(0);
     } else {
       parsed.unknown = a;
       break;
@@ -370,10 +405,13 @@ function runWorkspaceSetup(argv, options = {}) {
     if (!checkoutResult.ok) {
       const createResult = runGitFn(['checkout', '-b', executeBranch]);
       if (!createResult.ok) {
+        // Fall back to the first checkout's stderr when the -b attempt
+        // produced none, so the reported reason is never empty.
+        const reason = createResult.stderr || checkoutResult.stderr || 'unknown error';
         return {
           json: {
             status: 'error',
-            error: `Could not switch to or create branch ${executeBranch}: ${createResult.stderr}`,
+            error: `Could not switch to or create branch ${executeBranch}: ${reason}`,
           },
           stderr: '',
           exitCode: 2,

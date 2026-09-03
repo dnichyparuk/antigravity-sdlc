@@ -351,8 +351,39 @@ test('classifyCommitFailure: identity signature', () => {
     const result = classifyCommitFailure(detail, { hookPresent: true });
     assert.deepStrictEqual(result, { hookFailed: false, classification: 'identity' });
   }
-  const userNameCase = classifyCommitFailure('fatal: user.name is not configured', { hookPresent: false });
-  assert.deepStrictEqual(userNameCase, { hookFailed: false, classification: 'identity' });
+  const fatalEmptyIdentCase = classifyCommitFailure(
+    'fatal: empty ident name (for <you@example.com>) not allowed',
+    { hookPresent: false },
+  );
+  assert.deepStrictEqual(fatalEmptyIdentCase, { hookFailed: false, classification: 'identity' });
+  const fatalAutoDetectCase = classifyCommitFailure(
+    'fatal: unable to auto-detect email address, please set it with the command above.',
+    { hookPresent: false },
+  );
+  assert.deepStrictEqual(fatalAutoDetectCase, { hookFailed: false, classification: 'identity' });
+});
+
+test('classifyCommitFailure: anchored identity signature wins even when hookPresent is true', () => {
+  const result = classifyCommitFailure('Author identity unknown\n*** Please tell me who you are.', { hookPresent: true });
+  assert.deepStrictEqual(result, { hookFailed: false, classification: 'identity' });
+});
+
+test('classifyCommitFailure: bare "user.email" text from a hook does NOT override a present hook', () => {
+  // A pre-commit hook (e.g. a config linter) can print "user.email" for
+  // reasons unrelated to git identity — that wording is not in
+  // FAILURE_SIGNATURES at all. With hookPresent: true this must classify as
+  // 'hook' (not 'identity'), so the stash-recovery guidance
+  // (commit.js:409-411) is not suppressed.
+  const result = classifyCommitFailure('error: user.email field misspelled in config.yaml', { hookPresent: true });
+  assert.deepStrictEqual(result, { hookFailed: true, classification: 'hook' });
+});
+
+test('classifyCommitFailure: husky "protected branch" text without remote: framing does NOT override a present hook', () => {
+  // Husky/hook output can echo "protected branch" without git/GitHub's own
+  // `remote:`-prefixed or GH006 framing. hookPresent: true must keep this as
+  // 'hook', not misclassify it as 'protected-branch'.
+  const result = classifyCommitFailure('ERROR: protected branch, cannot commit directly to main', { hookPresent: true });
+  assert.deepStrictEqual(result, { hookFailed: true, classification: 'hook' });
 });
 
 test('classifyCommitFailure: gpg signature', () => {
@@ -365,12 +396,20 @@ test('classifyCommitFailure: nothing-to-commit signature', () => {
   assert.deepStrictEqual(result, { hookFailed: false, classification: 'nothing-to-commit' });
 });
 
+test('classifyCommitFailure: nothing-to-commit signature — untracked-files wording', () => {
+  const result = classifyCommitFailure(
+    'nothing added to commit but untracked files present (use "git add" to track)',
+    { hookPresent: true },
+  );
+  assert.deepStrictEqual(result, { hookFailed: false, classification: 'nothing-to-commit' });
+});
+
 test('classifyCommitFailure: protected-branch signature', () => {
-  const result = classifyCommitFailure('remote: error: GH006: protected branch update failed', { hookPresent: true });
+  const result = classifyCommitFailure('remote: error: GH006: Protected branch update failed', { hookPresent: true });
   assert.deepStrictEqual(result, { hookFailed: false, classification: 'protected-branch' });
 });
 
-test('classifyCommitFailure: signature match wins even when hookPresent says otherwise', () => {
+test('classifyCommitFailure: anchored signature wins even when hookPresent says otherwise', () => {
   const result = classifyCommitFailure('nothing to commit, working tree clean', { hookPresent: true });
   assert.strictEqual(result.classification, 'nothing-to-commit');
   assert.strictEqual(result.hookFailed, false);
@@ -399,6 +438,14 @@ test('classifyCommitFailure: unknown message + hookPresent undefined/null -> amb
     classifyCommitFailure('eslint failed on 2 files'),
     { hookFailed: true, classification: 'ambiguous' },
   );
+});
+
+test('classifyCommitFailure: unanchored-looking text + hookPresent undefined -> ambiguous, not a guessed classification', () => {
+  // hookPresent unknown means a hook's presence can't be ruled out, and
+  // "user.email" is not an anchored signature, so the result is 'ambiguous'
+  // — the same as any other unmatched text with hookPresent unknown.
+  const result = classifyCommitFailure('error: user.email field misspelled in config.yaml', {});
+  assert.deepStrictEqual(result, { hookFailed: true, classification: 'ambiguous' });
 });
 
 // ---------------------------------------------------------------------------

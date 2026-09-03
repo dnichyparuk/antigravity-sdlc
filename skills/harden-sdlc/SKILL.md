@@ -29,9 +29,6 @@ next time. Implements `docs/specs/harden-sdlc.md`.
 If neither `--failure-text` nor `--from-issue` is present, stop with an error
 message.
 
-`--failure-text` and `--from-issue` are mutually exclusive — the prepare
-script exits 1 with a message if both are passed.
-
 Required flag (always): `--skill`. Optional: `--step`, `--operation`,
 `--exit-code`, `--error-type`, `--user-intent`, `--args-string`.
 
@@ -75,10 +72,6 @@ values for optional fields are tolerated.
 - Exit code 2: prepare script crashed — show stderr and stop. Do **not**
   recursively dispatch this skill on its own crash; this is a plugin defect and
   belongs in `error-report-sdlc`.
-
-**Do NOT read the manifest file contents into the main context yet.** Step 2
-needs only the classification preview (a small subset), and Step 3 hands the
-full manifest path to the orchestrator agent.
 
 ---
 
@@ -197,11 +190,22 @@ dimension file) is never transiently invalid:
 
 - For `surface == "plan-guardrails"` / `"execute-guardrails"` (target
   `.sdlc/config.json`): write the merged config to
-  `.sdlc/config.json.harden-tmp`, then validate that temp path:
+  `.sdlc/config.json.harden-tmp`, then validate that temp path — pass the
+  section being changed (`plan` or `execute`, from the proposal's surface)
+  as `--section`, so validation actually checks the guardrail that was
+  proposed:
 
   ```shell
-  node "<PLUGIN_ROOT>/scripts/ci/validate-guardrails.js" --project-root "<target>.harden-tmp"
+  SECTION=plan            # or: execute  (from proposal.surface)
+  node "<PLUGIN_ROOT>/scripts/ci/validate-guardrails.js" --config-file ".sdlc/config.json.harden-tmp" --section "$SECTION"
   ```
+
+  On exit 0: `fs.renameSync(tmp, target)` (or `mv`) — this is the only write
+  `.sdlc/config.json` ever receives, and it happens only after validation
+  passes. On non-zero exit: delete the temp file, surface the validator's
+  error, and use AskUserQuestion to offer **retry** (let the user adjust the
+  patch inline) or **cancel** (skip this proposal). Never silently commit a
+  schema-invalid edit.
 
 - For `surface == "review-dimensions"` (target the dimension file): write the
   merged content to `<targetFile>.harden-tmp`, then validate that temp path:
@@ -230,10 +234,6 @@ Display a one-line confirmation after each write:
 ```
 Applied {action} on {surface} → {targetFile}
 ```
-
-Severity vocabulary per surface is canonical in `lib/dimensions.js`
-(`VALID_SEVERITIES`, `GUARDRAIL_SEVERITIES`) — the orchestrator already chose
-the correct vocabulary in its proposal; never substitute one for the other.
 
 **When `proposal.action === "consolidate"`:** the proposal targets an existing
 guardrail by id. Locate the guardrail in `<section>.guardrails[]` by the id in
@@ -264,9 +264,6 @@ Use AskUserQuestion with options: **dispatch error-report-sdlc** | **skip**.
   duplicate dispatch logic).
 - On `skip`: record the skip in Step 7 Learning Capture and exit cleanly.
 
-When `RESULT.errorReportPayload == null` on `ambiguous` (pure user-code
-ambiguity), this sub-step is suppressed entirely — do not surface the prompt.
-
 ---
 
 ## Step 6 — PLUGIN-DEFECT ROUTE: Dispatch error-report-sdlc
@@ -288,8 +285,6 @@ When `RESULT.classification == "plugin-defect"`:
 4. Do NOT edit any user-side hardening surface in the plugin-defect path. The
    no-silent-write invariant applies here too — the user must explicitly
    approve the error-report dispatch.
-
-The trap from Step 1 cleans up the manifest on every exit path.
 
 ---
 

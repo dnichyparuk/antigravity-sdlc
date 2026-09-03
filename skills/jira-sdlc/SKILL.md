@@ -31,11 +31,6 @@ Step 0's cache-status evaluation (`--force-refresh` or a stale-data failure). Le
 caches at `.sdlc/jira-cache/<KEY>.json` migrate to this layout automatically on the next
 `--check`; the legacy file is left in place.
 
-Every write payload is built from a resolved description template (shipped
-`templates/<Type>.md`, overridable at `.sdlc/jira-templates/<Type>.md`) with every
-`{placeholder}` marker replaced or its section removed — never dispatched with raw
-placeholder text (full resolution procedure in Step 2.5).
-
 ---
 
 ## Step 0 — Parse Arguments and Check Cache

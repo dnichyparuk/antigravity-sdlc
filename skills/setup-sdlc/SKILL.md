@@ -106,8 +106,6 @@ The JSON contains these top-level keys:
 
 <!-- Implements R-menu-1, R-menu-4. Step 1 is plain chat output; AskUserQuestion is intentionally NOT used here. -->
 
-**Direct-entry flag bypass (preserved):** When `--only`, `--force`, or any direct-entry flag from the Arguments table was passed, `selectedIds` are resolved before Step 1 by the flag-alias routing in Step 0. Skip the entire menu (no numbered list, no chat prompt) and jump to Step 2/3 with the resolved id set.
-
 **Render the status block**, using `section.label` and `section.summary` verbatim. Badge per row is driven by `section.state`: `[set]` (configured), `[not set]` (no config), `[legacy]` (needs migration; locked when `section.locked` is true):
 
 ```
@@ -291,8 +289,6 @@ After all version section fields are collected and BEFORE storing the section ob
    - `incompatible` → print `compat.message`, then use AskUserQuestion (single-select): "Pre-release labels are not supported for `<fileType>`. Clear `preRelease`, or proceed anyway?" → options `clear` (omit `preRelease` from the stored section), `proceed` (store as-is, accepting risk).
 4. The check runs once per version-section dispatch; it does NOT re-trigger if the same compat verdict was already resolved within a single uninterrupted execution of Step 3 (state-machine idempotency: a single run never asks the same question twice for the same `(fileType, preRelease)` pair).
 
-This check applies only to the `version` section and only when `mode === 'file'` (the `fileType` field is known). When `mode === 'tag'`, no `fileType` is configured so the check is skipped.
-
 **Answer mapping when assembling the section object:**
 - `enum` fields → write the selected option string verbatim
 - `multi-select` fields → write the array of selected options
@@ -302,8 +298,6 @@ This check applies only to the `version` section and only when `mode === 'file'`
 - `list` fields → accept comma-separated input; split on `,` and trim each element to produce a string array; write the resulting array
 
 You MUST issue exactly one AskUserQuestion per `section.fields[]` entry that survives the gating above. Do not batch, reorder, or hand-enumerate fields — the manifest owns the list.
-
-After the field loop, store the assembled section object keyed by id; the "Writing config files" step will persist it.
 
 #### 3.commit / 3.pr. Inline commit- and PR-pattern builders
 
@@ -462,8 +456,6 @@ This skill is safe to re-run. Already-configured sections are skipped unless `--
 **skill/setup.js must run from the project root.** It uses `process.cwd()` to locate config files. If the working directory is wrong, detection will silently return empty results.
 
 **Ship config is developer-local.** Ship preferences live in `.sdlc/local.json` (gitignored), not in `.sdlc/config.json`. Each developer has their own ship preferences.
-
-**Migration may find conflicts.** If both unified config (`.sdlc/config.json`) and legacy files exist for the same section, the unified config wins. The `migrateConfig()` function reports these as `conflicts` -- display them to the user and explain that the legacy values were NOT merged.
 
 **Legacy review config has two possible locations.** `.sdlc/review.json` and `.sdlc/review.json` are both legacy paths. `migrateConfig()` prefers `.sdlc/review.json` when both exist.
 

@@ -45,13 +45,26 @@ function parseArgs(argv) {
 // Core (injectable for tests)
 // ---------------------------------------------------------------------------
 
-function readStdin(stream) {
+function readStdin(stream = process.stdin) {
   return new Promise((resolve, reject) => {
     let data = '';
     stream.setEncoding('utf8');
-    stream.on('data', (chunk) => { data += chunk; });
-    stream.on('end', () => resolve(data));
-    stream.on('error', reject);
+
+    const onData = (chunk) => { data += chunk; };
+    const onEnd = () => settle(() => resolve(data));
+    const onError = (err) => settle(() => reject(err));
+
+    function settle(action) {
+      stream.removeListener('data', onData);
+      stream.removeListener('end', onEnd);
+      stream.removeListener('error', onError);
+      action();
+    }
+
+    stream.on('data', onData);
+    stream.on('end', onEnd);
+    stream.on('error', onError);
+    stream.resume();
   });
 }
 
@@ -103,7 +116,7 @@ async function main(argv) {
   process.exit(exitCode);
 }
 
-module.exports = { parseArgs, extractProposalField, runParseProposal };
+module.exports = { parseArgs, extractProposalField, runParseProposal, readStdin };
 
 if (require.main === module) {
   main(process.argv);

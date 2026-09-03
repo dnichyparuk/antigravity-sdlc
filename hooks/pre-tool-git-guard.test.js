@@ -25,14 +25,21 @@ test('pre-tool-git-guard: malformed stdin denies with actionable fail-closed rea
   );
 });
 
-test('pre-tool-git-guard: a valid safe command allows', () => {
-  const input = JSON.stringify({ toolCall: { args: { command: 'git status' } } });
+test('pre-tool-git-guard: a valid safe command allows (Antigravity run_command/CommandLine payload)', () => {
+  const input = JSON.stringify({ toolCall: { name: 'run_command', args: { CommandLine: 'git status' } } });
   const output = runHook(input);
   assert.strictEqual(output.decision, 'allow');
 });
 
-test('pre-tool-git-guard: git push --force denies', () => {
-  const input = JSON.stringify({ toolCall: { args: { command: 'git push --force origin main' } } });
+test('pre-tool-git-guard: git push --force denies (Antigravity run_command/CommandLine payload)', () => {
+  const input = JSON.stringify({ toolCall: { name: 'run_command', args: { CommandLine: 'git push --force origin main' } } });
+  const output = runHook(input);
+  assert.strictEqual(output.decision, 'deny');
+  assert.ok(output.reason && output.reason.length > 0);
+});
+
+test('pre-tool-git-guard: legacy args.command fallback still denies git push --force (fallback path, not primary)', () => {
+  const input = JSON.stringify({ toolCall: { name: 'run_command', args: { command: 'git push --force origin main' } } });
   const output = runHook(input);
   assert.strictEqual(output.decision, 'deny');
   assert.ok(output.reason && output.reason.length > 0);

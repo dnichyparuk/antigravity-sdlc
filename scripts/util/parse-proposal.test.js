@@ -4,8 +4,9 @@ const test   = require('node:test');
 const assert = require('node:assert/strict');
 const path   = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { PassThrough } = require('node:stream');
 
-const { parseArgs, extractProposalField, runParseProposal } = require('./parse-proposal');
+const { parseArgs, extractProposalField, runParseProposal, readStdin } = require('./parse-proposal');
 
 const SCRIPT = path.join(__dirname, 'parse-proposal.js');
 
@@ -62,6 +63,7 @@ function fakeStdin(text) {
   const { EventEmitter } = require('node:events');
   const stream = new EventEmitter();
   stream.setEncoding = () => {};
+  stream.resume = () => {};
   process.nextTick(() => {
     stream.emit('data', text);
     stream.emit('end');
@@ -127,4 +129,19 @@ test('CLI: exits 2 on invalid JSON stdin', () => {
 
   assert.equal(res.status, 2);
   assert.match(res.stderr, /ERROR:/);
+});
+
+// ---------------------------------------------------------------------------
+// readStdin — listener hygiene
+// ---------------------------------------------------------------------------
+
+test('readStdin: removes its data/end/error listeners from the stream on settle', async () => {
+  const stream = new PassThrough();
+  const promise = readStdin(stream);
+  stream.end('{"proposal":{"title":"Hello"}}');
+  const result = await promise;
+  assert.equal(result, '{"proposal":{"title":"Hello"}}');
+  assert.equal(stream.listenerCount('data'), 0);
+  assert.equal(stream.listenerCount('end'), 0);
+  assert.equal(stream.listenerCount('error'), 0);
 });

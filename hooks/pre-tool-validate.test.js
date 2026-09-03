@@ -31,11 +31,22 @@ test('pre-tool-validate: a valid safe command (no target file) allows', () => {
   assert.strictEqual(output.decision, 'allow');
 });
 
-test('pre-tool-validate: a write to an unrelated file allows', () => {
+test('pre-tool-validate: a write_to_file to an unrelated file allows (Antigravity write_to_file/TargetFile+CodeContent payload)', () => {
   const input = JSON.stringify({
     toolCall: {
       name: 'write_to_file',
       args: { TargetFile: '/tmp/some-unrelated-file.js', CodeContent: 'console.log(1);' },
+    },
+  });
+  const output = runHook(input);
+  assert.strictEqual(output.decision, 'allow');
+});
+
+test('pre-tool-validate: a replace_file_content edit allows (Antigravity replace_file_content/TargetFile+CodeContent payload)', () => {
+  const input = JSON.stringify({
+    toolCall: {
+      name: 'replace_file_content',
+      args: { TargetFile: '/tmp/some-unrelated-file.js', CodeContent: 'console.log(2);' },
     },
   });
   const output = runHook(input);
