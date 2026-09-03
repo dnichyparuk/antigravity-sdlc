@@ -229,7 +229,7 @@ The following 9 technical optimization proposals outline how to significantly de
   - Add an automatic complexity classifier in `skill/ship.js`: if modified files $= 1$ and diff lines $< 15$, automatically route to `gemini-3.7-flash-low` with a capped response length (`max_tokens: 400`).
 
 #### Proposal 5: Commit Style History Pruning (`/commit-sdlc`)
-- **Current Bottleneck**: `commit-prepare.js` includes the last 15 commit messages in `.sdlc/tmp/commit-manifest.json` for style inference.
+- **Current Bottleneck**: `commit.js` includes the last 15 commit messages in `.sdlc/tmp/commit-manifest.json` for style inference.
 - **Optimization Design**:
   - Cap recent commit history to 5 oneline commits, saving $\approx 500-1000$ tokens per commit generation call while preserving style detection accuracy.
 
@@ -255,7 +255,7 @@ The following 9 technical optimization proposals outline how to significantly de
 
 | Proposal | Feasibility | Risk Level | Net Token Reduction | Implementation Complexity | Recommendation |
 |---|---|---|---|---|---|
-| **1. Dynamic Dimension Pruning** | 9.5 / 10 | Low | 40% – 60% (Review) | Low (Modify `review-prepare.js`) | **Adopt immediately (Phase 1)** |
+| **1. Dynamic Dimension Pruning** | 9.5 / 10 | Low | 40% – 60% (Review) | Low (Modify `review.js`) | **Adopt immediately (Phase 1)** |
 | **2. Diff-Hunk Budgeting & Truncation** | 9.0 / 10 | Low | 30% – 50% (Manifests) | Medium (Extend `diff-truncate.js`) | **Adopt (Phase 2)** |
 | **3. Task Fact Sheet Trimming** | 9.0 / 10 | Low-Med | 35% – 50% (Execution) | Medium (New `task-trimmer.js`) | **Adopt (Phase 2)** |
 | **4. Low-Complexity Fast-Path** | 8.5 / 10 | Low | 25% – 45% (Model routing) | Low-Med (Update `ship.js`) | **Adopt with safety guards (Phase 3)** |
@@ -270,7 +270,7 @@ The following 9 technical optimization proposals outline how to significantly de
 ## 🛡️ Safety Safeguards & Risk Mitigations
 
 To ensure that token optimization never compromises software safety or code review quality:
-1. **Fallback Review Lane**: If modified files do not trigger any specific dimension globs (e.g. novel file extension), `review-prepare.js` automatically falls back to dispatching a `general-review` lane rather than bypassing code review.
+1. **Fallback Review Lane**: If modified files do not trigger any specific dimension globs (e.g. novel file extension), `review.js` automatically falls back to dispatching a `general-review` lane rather than bypassing code review.
 2. **Context Invariant Header**: When trimming `implementation_plan.md` into task-specific fact sheets, the first 3 lines of the fact sheet must always retain the high-level Plan Goal and Architectural Invariants.
 3. **Critical Path Exemption**: The Low-Complexity Fast-Path is explicitly disabled for security-critical paths (e.g., files under `auth/`, `security/`, `.github/workflows/`, and `crypto/`), ensuring full model reasoning is always applied.
 

@@ -97,6 +97,18 @@ test('runValidateLinksCli: stdin read failure -> exit 2', async () => {
   assert.match(stderr.text(), /failed to read stdin/);
 });
 
+test('runValidateLinksCli: validate() throws -> caught, exit 2, error on stderr (never rejects)', async () => {
+  const stderr = fakeStream();
+  const code = await runValidateLinksCli(['node', 'x.js', '--file', '/fake/body.txt'], {
+    readFileSync: () => 'body text',
+    validate: async () => { throw new Error('boom: validator crashed'); },
+    stdout: fakeStream(),
+    stderr,
+  });
+  assert.strictEqual(code, 2);
+  assert.match(stderr.text(), /validate-links-cli: validate\(\) crashed: .*boom: validator crashed/s);
+});
+
 test('runValidateLinksCli: end-to-end against the real links.js validator (no mocked validate)', async () => {
   // Exercises the real scripts/lib/links.js validateLinks() with a
   // structurally-invalid URL that fails the URL constructor before any

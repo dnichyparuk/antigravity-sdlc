@@ -84,9 +84,11 @@ function readStdin(stream = process.stdin) {
 
 /**
  * Runs the shared validate-links CLI flow. Writes to stdout/stderr and
- * resolves an exit code (does not call process.exit — callers decide when
- * to exit, and tests can inject stdout/stderr/IO deps instead of hitting
- * the real process streams or filesystem).
+ * resolves an exit code — never rejects, including when `validate()` itself
+ * throws (caught and mapped to exit 2, mirroring the other failure branches
+ * in this function). Does not call process.exit — callers decide when to
+ * exit, and tests can inject stdout/stderr/IO deps instead of hitting the
+ * real process streams or filesystem.
  *
  * @param {string[]} argv  process.argv-shaped array: [node, script, ...args]
  * @param {object} [deps]  injectable dependencies (for tests / reuse)
@@ -135,7 +137,13 @@ async function runValidateLinksCli(argv, deps = {}) {
 
   // ctx intentionally empty — validateLinks() auto-derives expectedRepo /
   // jiraSite. Callers MUST NOT construct ctx JSON (see module docstring).
-  const result = await validate(body, {});
+  let result;
+  try {
+    result = await validate(body, {});
+  } catch (err) {
+    stderr.write(`validate-links-cli: validate() crashed: ${(err && err.stack) || err}\n`);
+    return 2;
+  }
 
   if (result.ok) {
     const skippedNote = result.skipped && result.skipped.length ? ` (${result.skipped.length} skipped)` : '';
