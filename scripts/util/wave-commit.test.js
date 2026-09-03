@@ -176,6 +176,20 @@ test('CLI exits 1 with usage text when --titles is missing', () => {
   assert.match(result.stderr, /Usage: wave-commit\.js/);
 });
 
+test('CLI reports {committed:false, reason:"empty wave title"} via JSON when --titles is whitespace-only', () => {
+  const result = spawnSync(process.execPath, [SCRIPT, '--wave', '1', '--titles', '   '], { encoding: 'utf8' });
+  assert.strictEqual(result.status, 1);
+  const output = JSON.parse(result.stdout);
+  assert.deepStrictEqual(output, { committed: false, reason: 'empty wave title' });
+});
+
+test('CLI reports {committed:false, reason:"empty wave title"} via JSON when --titles has only empty segments', () => {
+  const result = spawnSync(process.execPath, [SCRIPT, '--wave', '1', '--titles', ' | | '], { encoding: 'utf8' });
+  assert.strictEqual(result.status, 1);
+  const output = JSON.parse(result.stdout);
+  assert.deepStrictEqual(output, { committed: false, reason: 'empty wave title' });
+});
+
 test('CLI end-to-end against a real git repo: soft success when there is nothing to commit', () => {
   const fs = require('node:fs');
   const os = require('node:os');

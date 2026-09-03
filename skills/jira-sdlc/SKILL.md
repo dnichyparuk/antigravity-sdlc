@@ -92,10 +92,12 @@ Read the check output:
 - If `fresh: false` AND `maxAgeHours > 0` → TTL-based expiry exceeded. Proceed to **Step 1**.
 - Otherwise (cache exists, complete, and either permanent or within TTL) → load cache via `--load`, skip to **Step 2**.
 
-Load cache:
+Load cache. `--load` prints the path of a temp manifest (via `writeOutput`), **not** the
+cache JSON — capture that path into `JIRA_CONTEXT_FILE` (never redirect stdout into it,
+which would overwrite the manifest with its own path):
 
 ```bash
-node "<PLUGIN_ROOT>/scripts/skill/jira.js" --project "$PROJECT_KEY" --load > "$JIRA_CONTEXT_FILE"
+JIRA_CONTEXT_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/jira.js" --project "$PROJECT_KEY" --load)
 ```
 
 ### Handle `--init-templates`
@@ -126,9 +128,11 @@ If `--init-templates` flag is present:
        > Which default template should I use?
 
        Options: [Suggested template (Recommended)], [other available default templates], [Skip — no template for this type]
-   - For each user selection (not "Skip"), copy the template:
+   - For each user selection (not "Skip"), copy the template. `--copy-template` prints
+     the path of a temp manifest (`{ copied, reason, type, destination }`), not the JSON
+     itself — capture it:
      ```bash
-     node "<PLUGIN_ROOT>/scripts/skill/jira.js" --project "$PROJECT_KEY" --copy-template --type "<typeName>" --from "<selectedTemplate>"
+     COPY_RESULT=$(node "<PLUGIN_ROOT>/scripts/skill/jira.js" --project "$PROJECT_KEY" --copy-template --type "<typeName>" --from "<selectedTemplate>")
      ```
    - Report final results: "N additional templates created from user selections."
 
@@ -254,16 +258,18 @@ Section 0 — top-level keys `version`, `lastUpdated`, `maxAgeHours`, `cloudId`,
 `currentUser`, `project`, `issueTypes`, `fieldSchemas`, `workflows`, `linkTypes`,
 `userMappings` — populated from Phases 1–5.
 
-Save:
+Save. `--save` prints the path of a temp manifest (`{ saved, cachePath }`), not the JSON
+itself — capture it:
 
 ```bash
-echo '<cache_json>' | node "<PLUGIN_ROOT>/scripts/skill/jira.js" --project "$PROJECT_KEY" --save
+SAVE_RESULT=$(echo '<cache_json>' | node "<PLUGIN_ROOT>/scripts/skill/jira.js" --project "$PROJECT_KEY" --save)
 ```
 
-Then load the cache:
+Then load the cache — `--load` likewise prints a manifest path, so capture it into
+`JIRA_CONTEXT_FILE` rather than redirecting stdout into that file:
 
 ```bash
-node "<PLUGIN_ROOT>/scripts/skill/jira.js" --project "$PROJECT_KEY" --load > "$JIRA_CONTEXT_FILE"
+JIRA_CONTEXT_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/jira.js" --project "$PROJECT_KEY" --load)
 ```
 
 Report: "Cache initialized for `[PROJECT_KEY]` — `[N]` issue types, `[N]` workflow states mapped."
@@ -442,9 +448,12 @@ After operations that reveal new information, update the cache incrementally:
 
 | Trigger | Cache update command |
 |---------|---------------------|
-| New user resolved via lookupJiraAccountId | `echo '{"<name>":"<id>"}' \| node "<PLUGIN_ROOT>/scripts/skill/jira.js" --project "$KEY" --save-field userMappings` |
-| Transition from a status not in workflow cache | `echo '<workflows_json>' \| node "<PLUGIN_ROOT>/scripts/skill/jira.js" --project "$KEY" --save-field workflows` |
+| New user resolved via lookupJiraAccountId | `SAVE_RESULT=$(echo '{"<name>":"<id>"}' \| node "<PLUGIN_ROOT>/scripts/skill/jira.js" --project "$KEY" --save-field userMappings)` |
+| Transition from a status not in workflow cache | `SAVE_RESULT=$(echo '<workflows_json>' \| node "<PLUGIN_ROOT>/scripts/skill/jira.js" --project "$KEY" --save-field workflows)` |
 | Stale transition ID, or a field key/value not in cache (404/400) | **Auto-refresh**: run `--force-refresh`, reload cache, retry operation once |
+
+`--save-field` prints the path of a temp manifest (`{ saved, field, cachePath }`), not the
+JSON itself — always capture it (`SAVE_RESULT=$(…)`) rather than calling `node …` bare.
 
 ---
 
@@ -490,8 +499,13 @@ node "<PLUGIN_ROOT>/scripts/lib/mcp-failure.js" --telemetry --class "$FAILURE_CL
 | Transition safety | Transition `id` from cache or fresh `getTransitionsForJiraIssue`, never guessed |
 | User disambiguation | `lookupJiraAccountId` results always disambiguated if multiple matches |
 | No fabricated values | All field values derived from cache `allowedValues` or user input |
-| Hook verified | No write MCP call dispatched without the PreToolUse hook successfully verifying the critique + approval artifacts (payload-hash bound, < 10 min old) |
+| Artifacts verified | No write MCP call dispatched without the LLM confirming both `approval-<hash>.token` and `critique-<hash>.json` exist for this exact `payload_hash` (< 10 min old). No hook backstop exists (see Step 3). |
 | Link verified | No write MCP call (`createJiraIssue`, `editJiraIssue`, `addCommentToJiraIssue`) dispatched without `scripts/skill/jira.js --validate-body` returning exit 0. The script enforces — SKILL.md only invokes it. See Step 2.7. |
+| Hash-bound approval | No write MCP call dispatched without `approval-<hash>.token` present on disk for this exact `payload_hash` — LLM-verified per Step 3; no hook backstop exists |
+| Critique artifact age | No write MCP call dispatched without `critique-<hash>.json` present for this `payload_hash` and less than 10 minutes old — LLM-verified per Step 3; no hook backstop exists |
+| Link verification passed | No write MCP call dispatched before Step 2.7's `scripts/skill/jira.js --validate-body` has returned exit 0 for the final payload in this turn |
+| No write without approve | No write MCP call dispatched without an explicit `approve` from the Step 2.6 `AskUserQuestion` prompt in this exact turn — LLM-verified per Step 3; no hook backstop exists |
+| Release notes single-sentence | No `createJiraIssue` / `editJiraIssue` dispatch where the `## Release Notes` section contains two or more sentences — a single sentence is the only allowed carve-out (R25.5); two or more sentences fail this check |
 
 ---
 
@@ -502,7 +516,7 @@ node "<PLUGIN_ROOT>/scripts/lib/mcp-failure.js" --telemetry --class "$FAILURE_CL
   never generate a free-form description when a template is available (Step 2.5)
 - Write critique + approval artifacts only via `lib/artifact-store.js` /
   `lib/payload-hash.js` — never bypass with a direct `fs.writeFile`, which breaks the
-  canonical hash contract the PreToolUse hook verifies
+  canonical hash contract both artifacts are keyed by
 
 ---
 

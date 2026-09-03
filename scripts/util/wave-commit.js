@@ -27,11 +27,16 @@
  *   {"committed": true,  "sha": "<sha>", "softSuccess": false}
  *   {"committed": false, "sha": null,    "softSuccess": true}
  *   {"committed": false, "sha": null,    "softSuccess": false, "error": "<message>"}
+ *   {"committed": false, "reason": "empty wave title"}
+ *     — --titles was passed but every segment was empty/whitespace after
+ *       trimming (e.g. `--titles "  "` or `--titles "|  |"`).
  *
  * Exit codes:
  *   0 = committed, or soft success (nothing to commit)
- *   1 = git add/commit failed for a real reason (e.g. pre-commit hook), or
- *       usage error (missing/invalid --wave or --titles)
+ *   1 = git add/commit failed for a real reason (e.g. pre-commit hook),
+ *       empty/whitespace --titles (JSON emitted, see above), or a usage
+ *       error (missing/invalid --wave, or --titles omitted entirely — no
+ *       JSON emitted for the latter)
  *
  * `sha` feeds directly into the existing state handoff, unchanged:
  *   node scripts/state/execute.js wave-committed --sha <sha>
@@ -168,10 +173,21 @@ function runWaveCommit(wave, titles, { spawnFn = spawnSync, cwd = process.cwd() 
 
 function main(argv) {
   const { wave, titles } = parseArgs(argv);
+  const args = argv.slice(2);
+  const titlesFlagPresent = args.indexOf('--titles') !== -1;
 
-  if (wave == null || isNaN(wave) || titles.length === 0) {
+  // Missing --wave, or --titles omitted entirely: usage error, no JSON.
+  if (wave == null || isNaN(wave) || (!titlesFlagPresent && titles.length === 0)) {
     process.stderr.write('Usage: wave-commit.js --wave <N> --titles "<title1>|<title2>"\n');
     process.exit(1);
+  }
+
+  // --titles was passed but every segment was empty/whitespace after
+  // trimming (e.g. `--titles "  "` or `--titles "|  |"`): report a
+  // structured JSON reason instead of exiting 1 with no output.
+  if (titles.length === 0) {
+    writeJsonLine({ committed: false, reason: 'empty wave title' }, { exitCode: 1 });
+    return;
   }
 
   const result = runWaveCommit(wave, titles);

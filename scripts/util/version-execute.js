@@ -17,7 +17,7 @@
  *                         without creating a tag.
  *
  * Usage:
- *   node version-execute.js retag --tag <name>
+ *   node version-execute.js retag --tag <name> [--expected-head <sha>]
  *   node version-execute.js release --tag <name> [--hotfix] [--version-file <path>]
  *                                   [--changelog-file <path>] [--no-push]
  *                                   [--set-upstream <branch>]
@@ -28,10 +28,17 @@
  *   retag, success:  {"status":"ok","tag":"v1.2.3"}
  *   retag, failure:  {"status":"failed","recovered":true,"failedStep":"push",
  *                     "reason":"push rejected: non-fast-forward"}
+ *   retag, verify failure (--expected-head given and the tag lands elsewhere):
+ *                    {"status":"failed","failedStep":"verify",
+ *                     "reason":"tag points at abc1234, approved head was def5678"}
  *   release, success:{"status":"ok","tag":"v1.2.3"}
- *   release, failure:{"status":"failed","rolledBackTag":true,"failedStep":"push",
- *                     "reason":"push rejected: non-fast-forward — local tag v1.2.3
- *                               deleted to keep repo state consistent"}
+ *   release, push failure:      {"status":"failed","rolledBackTag":true,"failedStep":"push",
+ *                                "reason":"push rejected: non-fast-forward — local tag v1.2.3
+ *                                          deleted to keep repo state consistent"}
+ *   release, push-tags failure: {"status":"failed","rolledBackTag":false,"failedStep":"push-tags",
+ *                                "reason":"push rejected: non-fast-forward — release commit is
+ *                                          already on origin; local tag v1.2.3 kept",
+ *                                "recovery":"git push origin v1.2.3"}
  *   changelog-commit:{"status":"ok"} | {"status":"failed","reason":"..."}
  *
  * Exit codes:
@@ -44,9 +51,16 @@
  *     gone" state: any failure after the local delete recreates the local tag
  *     at the SHA it pointed to before the retag started, so a plain
  *     `git push origin <tag>` restores the original remote state.
- *   - `release` reports a failed post-tag push with its own `rolledBackTag`
- *     field (the just-created tag is deleted) rather than reusing `retag`'s
- *     `recovered` field — the two failure modes recover different things.
+ *   - `release` reports a failure with its own `rolledBackTag` field rather
+ *     than reusing `retag`'s `recovered` field — the two failure modes
+ *     recover different things. A failure on the release-commit push (before
+ *     the tag reaches the remote) deletes the just-created local tag
+ *     (`rolledBackTag: true`); a failure on the tag push (after the release
+ *     commit is already on the remote) keeps the local tag — deleting it
+ *     would strand the release with no recovery handle, since the
+ *     version-file gate refuses a re-run once the bump has landed — and
+ *     returns `rolledBackTag: false` plus a `recovery` field with the exact
+ *     `git push <remote> <tag>` command to finish the release.
  *
  * `spawnFn` is injectable on every exported core function so tests never need
  * a real git repo or remote. Runs in the current cwd (not resolveSdlcRoot()),
@@ -142,12 +156,22 @@ function recreateLocalTag(spawnFn, cwd, tag, sha, message) {
  * reporting, closing the non-atomic gap where both the local and the remote
  * tag are gone.
  *
+ * When `expectedHead` is passed (the `head` SHA from the prepare output the
+ * user actually approved), step 5 verifies against that captured value
+ * instead of a freshly re-derived `HEAD` — HEAD can move between approval and
+ * execution (e.g. a concurrent push), so re-deriving it at verify time could
+ * silently confirm a retag against a commit the user never approved. A
+ * mismatch is then a hard failure (`failedStep: 'verify'`), not the advisory
+ * warning used when `expectedHead` is omitted.
+ *
  * @param {string} tag
- * @param {{spawnFn?: Function, cwd?: string, remote?: string, message?: string}} [opts]
+ * @param {{spawnFn?: Function, cwd?: string, remote?: string, message?: string,
+ *          expectedHead?: string|null}} [opts]
  * @returns {{status: 'ok', tag: string, verified?: false, warning?: string}
- *          |{status: 'failed', recovered: boolean, failedStep: string, reason: string}}
+ *          |{status: 'failed', recovered: boolean, failedStep: string, reason: string}
+ *          |{status: 'failed', failedStep: 'verify', reason: string}}
  */
-function runRetag(tag, { spawnFn = spawnSync, cwd = process.cwd(), remote = DEFAULT_REMOTE, message } = {}) {
+function runRetag(tag, { spawnFn = spawnSync, cwd = process.cwd(), remote = DEFAULT_REMOTE, message, expectedHead = null } = {}) {
   const tagMessage = message || `Retag ${tag}`;
 
   // Capture the SHA before anything is deleted — it is the recovery target.
@@ -185,9 +209,24 @@ function runRetag(tag, { spawnFn = spawnSync, cwd = process.cwd(), remote = DEFA
     return fail('push', errorText(pushTag));
   }
 
-  // 5. Verify. A mismatch is a warning, not a failure — the retag itself
-  //    succeeded and the user can inspect manually.
+  // 5. Verify. When the caller supplied the approved head, compare against
+  //    that captured SHA — a mismatch means the tag landed somewhere other
+  //    than what the user approved, which is a hard failure. Without it,
+  //    fall back to a freshly re-derived HEAD, where a mismatch is only a
+  //    warning — the retag itself succeeded and the user can inspect manually.
   const tagSha = run(spawnFn, ['rev-parse', `refs/tags/${tag}^{commit}`], cwd);
+
+  if (expectedHead) {
+    if (tagSha.status !== 0 || tagSha.stdout !== expectedHead) {
+      return {
+        status: 'failed',
+        failedStep: 'verify',
+        reason: `tag points at ${tagSha.stdout || 'unknown'}, approved head was ${expectedHead}`,
+      };
+    }
+    return { status: 'ok', tag };
+  }
+
   const headSha = run(spawnFn, ['rev-parse', 'HEAD'], cwd);
   if (tagSha.status !== 0 || headSha.status !== 0 || tagSha.stdout !== headSha.stdout) {
     return {
@@ -263,7 +302,7 @@ function checkVersionFileGate(spawnFn, cwd, versionFile) {
  *          noPush?: boolean, upstreamBranch?: string|null, remote?: string,
  *          spawnFn?: Function, cwd?: string}} [opts]
  * @returns {{status: 'ok', tag: string, pushed?: false}
- *          |{status: 'failed', failedStep: string, reason: string, rolledBackTag?: boolean, restoredVersionFile?: boolean, diff?: string}}
+ *          |{status: 'failed', failedStep: string, reason: string, rolledBackTag?: boolean, recovery?: string, restoredVersionFile?: boolean, diff?: string}}
  */
 function runRelease(tag, opts = {}) {
   const {
@@ -317,8 +356,13 @@ function runRelease(tag, opts = {}) {
     return { status: 'ok', tag, pushed: false };
   }
 
-  // 5. Two-command push: the release commit, then the tags. `git push --tags`
+  // 5. Two-command push: the release commit, then the tag. `git push <tag>`
   //    alone does NOT push the release commit — both are required.
+  //
+  //    `rollbackTag` is only used for the pre-push failure below: once the
+  //    release commit push has succeeded, the commit is on the remote and
+  //    the local tag must never be deleted — it is the only recovery handle,
+  //    since the version-file gate makes a re-run of the release impossible.
   const rollbackTag = (failedStep, reason) => {
     const deleteResult = run(spawnFn, ['tag', '-d', tag], cwd);
     return {
@@ -337,9 +381,21 @@ function runRelease(tag, opts = {}) {
     return rollbackTag('push', errorText(commitPush));
   }
 
-  const tagPush = run(spawnFn, ['push', '--tags'], cwd);
+  // Explicit single-tag push (mirrors runRetag's push at :183) so unrelated
+  // local tags are never pushed as a side effect.
+  const tagPush = run(spawnFn, ['push', remote, tag], cwd);
   if (tagPush.status !== 0) {
-    return rollbackTag('push-tags', errorText(tagPush));
+    // The release commit already landed on the remote — deleting the local
+    // tag here would strand it with no way to recover, since the version-file
+    // gate refuses a re-run once the bump has landed. Keep the tag and hand
+    // back the exact recovery command instead.
+    return {
+      status: 'failed',
+      rolledBackTag: false,
+      failedStep: 'push-tags',
+      reason: `${errorText(tagPush)} — release commit is already on ${remote}; local tag ${tag} kept`,
+      recovery: `git push ${remote} ${tag}`,
+    };
   }
 
   return { status: 'ok', tag };
@@ -407,7 +463,7 @@ function runChangelogCommit(opts = {}) {
  * @param {string[]} argv  Full argv (`process.argv` shape).
  * @returns {{subcommand: string|null, tag: string|null, hotfix: boolean,
  *            versionFile: string|null, changelogFile: string|null,
- *            noPush: boolean, upstreamBranch: string|null}}
+ *            noPush: boolean, upstreamBranch: string|null, expectedHead: string|null}}
  */
 function parseArgs(argv) {
   const args = argv.slice(2);
@@ -419,6 +475,7 @@ function parseArgs(argv) {
     changelogFile: null,
     noPush: false,
     upstreamBranch: null,
+    expectedHead: null,
   };
 
   for (let i = 1; i < args.length; i++) {
@@ -435,6 +492,8 @@ function parseArgs(argv) {
       result.noPush = true;
     } else if (a === '--set-upstream' && args[i + 1]) {
       result.upstreamBranch = args[++i];
+    } else if (a === '--expected-head' && args[i + 1]) {
+      result.expectedHead = args[++i];
     }
   }
 
@@ -444,7 +503,7 @@ function parseArgs(argv) {
 function usage() {
   return (
     'Usage:\n' +
-    '  version-execute.js retag --tag <name>\n' +
+    '  version-execute.js retag --tag <name> [--expected-head <sha>]\n' +
     '  version-execute.js release --tag <name> [--hotfix] [--version-file <path>]\n' +
     '                             [--changelog-file <path>] [--no-push] [--set-upstream <branch>]\n' +
     '  version-execute.js changelog-commit [--tag <name>] [--changelog-file <path>] [--no-push]\n'
@@ -456,7 +515,7 @@ function cmdRetag(opts) {
     writeJsonLine({ status: 'failed', reason: 'Missing required argument: --tag <name>' }, { exitCode: 1 });
     return;
   }
-  const result = runRetag(opts.tag);
+  const result = runRetag(opts.tag, { expectedHead: opts.expectedHead });
   writeJsonLine(result, { exitCode: result.status === 'ok' ? 0 : 1 });
 }
 

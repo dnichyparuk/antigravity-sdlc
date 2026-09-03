@@ -34,8 +34,8 @@ node "<PLUGIN_ROOT>/scripts/util/fetch-logs.js" --logs <path-or-text>
 
 > **Contract (Input/Output):**
 > - **Input**: `--pr-number <N>` or `--logs <path-or-text>` — mutually exclusive. The `--pr-number` value is the PR number parsed from `$ARGUMENTS` and must be numeric. The `--logs` value is passed as-is.
-> - **Output**: Prints the CI failure log excerpt to stdout. Exit 0 on success — and also when no failed check is found or the run link carries no run id, in which case stdout is empty and a one-line diagnostic goes to stderr. Exit 1 on a missing/non-numeric `--pr-number`, mutually-exclusive flag violation, or an unknown flag; exit 2 on an unexpected crash.
-> - **Authentication**: If `gh` is unauthenticated when using `--pr-number`, `fetchPrChecks` returns `ghAuthenticated: false` with an `errorMessage` explaining the auth failure.
+> - **Output**: Prints the CI failure log excerpt to stdout. Exit 0 on success — and also when no failed check is found or the run link carries no run id, in which case stdout is empty and a one-line diagnostic goes to stderr. Exit 1 on a missing/non-numeric `--pr-number`, mutually-exclusive flag violation, an unknown flag, **or `gh` not authenticated / PR lookup failed — do not treat as passing**; exit 2 on an unexpected crash.
+> - **Authentication**: If `gh` is unauthenticated when using `--pr-number`, `fetchPrChecks` returns `ghAuthenticated: false`; fetch-logs.js exits 1 with the `errorMessage` on stderr (not exit 0 — an empty stdout there would be indistinguishable from "no failed checks").
 
 If logs cannot be resolved, emit `{"status":"abort","reason":"<error message from fetch-logs.js>"}` and stop.
 
@@ -67,7 +67,8 @@ Read the JSON verdict on stdout: `{"category": "<lint|test-failure|type-error|bu
 Route by the `routingBucket` field:
 
 - **`actionable`** (`lint`, `test-failure`, `type-error`) with `--auto` set: use the `Edit` tool to apply the minimal fix — correct the lint violation, fix the failing assertion, add the missing import, or correct the type annotation. Do NOT scaffold abstractions or refactor.
-- **Everything else** — `always-proposal` categories (`build-error`, `dependency`, `infra`, `unknown`), or `actionable` without `--auto`: emit a proposal, no edits.
+- **Everything else** — `always-proposal` categories (`build-error`, `dependency`, `infra`), or `actionable` without `--auto`: emit a proposal, no edits.
+- **`unknown`** — falls through to `proposal` verdict **with the raw log excerpt as `summary`**: the classifier could not identify a category, so there is no diagnosis to summarize beyond the excerpt itself.
 
 Constraints: never run `git commit`, `git push`, or any state-changing git command; never modify files outside the project root.
 

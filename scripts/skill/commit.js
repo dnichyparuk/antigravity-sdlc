@@ -46,6 +46,7 @@
 'use strict';
 
 const path = require('node:path');
+const fs = require('node:fs');
 const { spawnSync } = require('node:child_process');
 const LIB = path.join(__dirname, '..', 'lib');
 
@@ -282,6 +283,108 @@ function runSquash(forkPoint, { spawnFn = spawnSync, cwd = process.cwd() } = {})
 
 const STASH_MESSAGE = 'commit-sdlc: temp stash';
 
+// ---------------------------------------------------------------------------
+// Commit-failure classification (Task 3)
+// ---------------------------------------------------------------------------
+
+/**
+ * Ordered signature table for classifying a failed `git commit`'s stderr/stdout.
+ * Evaluated top-to-bottom in `classifyCommitFailure` — first match wins.
+ */
+const FAILURE_SIGNATURES = [
+  { re: /Author identity unknown|Please tell me who you are|user\.(name|email)/i, classification: 'identity', hookFailed: false },
+  { re: /gpg failed to sign|signing failed|error: gpg/i, classification: 'gpg', hookFailed: false },
+  { re: /nothing to commit|no changes added to commit/i, classification: 'nothing-to-commit', hookFailed: false },
+  { re: /protected branch|pre-receive hook declined/i, classification: 'protected-branch', hookFailed: false },
+];
+
+/** Human-readable `reason` string per classification, for the failure JSON. */
+const CLASSIFICATION_REASONS = {
+  hook: 'pre-commit hook exited non-zero',
+  identity: 'git commit failed — author identity is not configured',
+  gpg: 'git commit failed — commit signing (gpg) failed',
+  'nothing-to-commit': 'git commit failed — nothing to commit',
+  'protected-branch': 'git commit failed — protected branch rejected the commit',
+  ambiguous: 'pre-commit hook exited non-zero',
+  other: 'git commit failed',
+};
+
+/**
+ * Classify a failed `git commit`'s stderr/stdout into one of the taxonomy's
+ * buckets. Pure function — no I/O.
+ *
+ * Signature matches (identity/gpg/nothing-to-commit/protected-branch) always
+ * win regardless of `hookPresent`, since those failures are never actually a
+ * pre-commit hook. When no signature matches, `hookPresent` (from
+ * `detectPreCommitHook`, derived once before the commit attempt) decides:
+ *   - `hookPresent === true`      -> classification 'hook', hookFailed: true
+ *   - `hookPresent === false`     -> classification 'other', hookFailed: false
+ *   - `hookPresent` undefined/null -> classification 'ambiguous', hookFailed: true
+ *
+ * @param {string} detail  commit stderr (fallback: stdout), trimmed.
+ * @param {{hookPresent?: boolean|null}} [opts]
+ * @returns {{hookFailed: boolean, classification: 'hook'|'identity'|'gpg'|
+ *            'nothing-to-commit'|'protected-branch'|'ambiguous'|'other'}}
+ */
+function classifyCommitFailure(detail, { hookPresent } = {}) {
+  const text = detail || '';
+  for (const sig of FAILURE_SIGNATURES) {
+    if (sig.re.test(text)) {
+      return { hookFailed: sig.hookFailed, classification: sig.classification };
+    }
+  }
+  if (hookPresent === false) return { hookFailed: false, classification: 'other' };
+  if (hookPresent === true) return { hookFailed: true, classification: 'hook' };
+  return { hookFailed: true, classification: 'ambiguous' };
+}
+
+/**
+ * Detects whether a pre-commit hook is configured for the current repo.
+ * Called at most ONCE per commit attempt — its result feeds directly into
+ * `classifyCommitFailure` so the two never disagree about hook presence for
+ * that attempt.
+ *
+ * Returns true if:
+ *   - `core.hooksPath` is set (git config), OR
+ *   - `<git-dir>/hooks/pre-commit` (resolved via
+ *     `git rev-parse --git-path hooks/pre-commit`) exists and is executable, OR
+ *   - `.husky/pre-commit` exists
+ * else false.
+ *
+ * @param {{execFn: (args: string[]) => {status: number|null, stdout: string, stderr: string},
+ *          fs?: typeof import('node:fs')}} opts
+ * @returns {boolean}
+ */
+function detectPreCommitHook({ execFn, fs: fsMod = fs } = {}) {
+  const hooksPathResult = execFn(['config', 'core.hooksPath']);
+  const hooksPath = hooksPathResult && hooksPathResult.status === 0
+    ? (hooksPathResult.stdout || '').trim()
+    : '';
+  if (hooksPath) return true;
+
+  const gitPathResult = execFn(['rev-parse', '--git-path', 'hooks/pre-commit']);
+  const preCommitPath = gitPathResult && gitPathResult.status === 0
+    ? (gitPathResult.stdout || '').trim()
+    : '';
+  if (preCommitPath) {
+    try {
+      const stat = fsMod.statSync(preCommitPath);
+      if (stat.isFile() && (stat.mode & 0o111) !== 0) return true;
+    } catch (err) {
+      // Not found or inaccessible — fall through to the husky check.
+    }
+  }
+
+  try {
+    const huskyStat = fsMod.statSync('.husky/pre-commit');
+    if (huskyStat.isFile()) return true;
+  } catch (err) {
+    // Not found — no hook detected via any path.
+  }
+
+  return false;
+}
+
 /**
  * Wrap the commit in the stash transaction:
  *   git stash push --keep-index -m "commit-sdlc: temp stash"
@@ -292,24 +395,33 @@ const STASH_MESSAGE = 'commit-sdlc: temp stash';
  * Step 5 reads this shape, it never re-derives it:
  *
  *   {"committed": true,  "hookFailed": false, "popConflict": false}
- *   {"committed": false, "hookFailed": true,  "popConflict": false,
+ *   {"committed": false, "hookFailed": true,  "classification": "hook", "popConflict": false,
  *    "reason": "pre-commit hook exited non-zero"}
+ *   {"committed": false, "hookFailed": false, "classification": "identity"|"gpg"|
+ *    "nothing-to-commit"|"protected-branch"|"other", "popConflict": false,
+ *    "reason": "<per-classification human string>"}
  *   {"committed": true,  "hookFailed": false, "popConflict": true,
  *    "conflictFiles": ["path/a.js"]}
  *
  * A `git stash push` failure aborts before any commit is attempted and returns
  * the same three flags with `committed: false` plus a `reason`.
  *
- * On hook failure the stash is deliberately LEFT in place (SKILL.md tells the
+ * On hook failure (`hookFailed: true`, i.e. classification 'hook' or
+ * 'ambiguous') the stash is deliberately LEFT in place (SKILL.md tells the
  * user to `git stash list`); popping it would discard the isolation the
  * transaction just established.
  *
+ * On a commit failure, `detectPreCommitHook` is derived exactly once (not
+ * re-checked per classification lookup) and fed straight into
+ * `classifyCommitFailure`; the success path never needs it and never pays
+ * for it.
+ *
  * @param {Function} commitFn  () => {status, stdout, stderr} — runs the commit.
- * @param {{spawnFn?: Function, cwd?: string, noStash?: boolean}} [opts]
- * @returns {{committed: boolean, hookFailed: boolean, popConflict: boolean,
+ * @param {{spawnFn?: Function, cwd?: string, noStash?: boolean, fs?: typeof import('node:fs')}} [opts]
+ * @returns {{committed: boolean, hookFailed: boolean, classification?: string, popConflict: boolean,
  *            reason?: string, detail?: string, conflictFiles?: string[]}}
  */
-function runStashTransaction(commitFn, { spawnFn = spawnSync, cwd = process.cwd(), noStash = false } = {}) {
+function runStashTransaction(commitFn, { spawnFn = spawnSync, cwd = process.cwd(), noStash = false, fs: fsMod = fs } = {}) {
   let stashed = false;
 
   if (!noStash) {
@@ -336,13 +448,41 @@ function runStashTransaction(commitFn, { spawnFn = spawnSync, cwd = process.cwd(
   const commit = commitFn();
   const commitStatus = commit && typeof commit.status === 'number' ? commit.status : 1;
   if (commitStatus !== 0) {
-    // Stash intentionally left in place — SKILL.md instructs the user to recover it.
+    // On hookFailed:true the stash is intentionally left in place — SKILL.md
+    // instructs the user to recover it.
     const detail = ((commit && commit.stderr) || (commit && commit.stdout) || '').trim();
+
+    // Derived ONCE, right here — classifyCommitFailure is the only consumer,
+    // so hook presence is checked exactly once per failed commit rather than
+    // being (re-)computed on every call or on the success path where it's
+    // never used. `execFn`'s `--git-path` result and `fs`'s relative lookups
+    // are both scoped to `cwd`, since `git rev-parse --git-path` prints a
+    // path relative to the process cwd it ran in.
+    let hookPresent;
+    try {
+      hookPresent = detectPreCommitHook({
+        execFn: (args) => {
+          const result = runGit(spawnFn, args, cwd);
+          if (args[0] === 'rev-parse' && args.includes('--git-path') && result.status === 0 && result.stdout) {
+            return { ...result, stdout: path.resolve(cwd, result.stdout) };
+          }
+          return result;
+        },
+        fs: {
+          statSync: (p) => fsMod.statSync(path.isAbsolute(p) ? p : path.join(cwd, p)),
+        },
+      });
+    } catch (err) {
+      hookPresent = undefined; // detection failed — classifyCommitFailure treats this as ambiguous.
+    }
+
+    const { hookFailed, classification } = classifyCommitFailure(detail, { hookPresent });
     const out = {
       committed: false,
-      hookFailed: true,
+      hookFailed,
+      classification,
       popConflict: false,
-      reason: 'pre-commit hook exited non-zero',
+      reason: CLASSIFICATION_REASONS[classification],
     };
     if (detail) out.detail = detail;
     return out;
@@ -566,8 +706,9 @@ function main() {
   const untrackedRaw   = exec('git ls-files --others --exclude-standard', { cwd: process.cwd() });
   const untrackedFiles = untrackedRaw ? untrackedRaw.split('\n').filter(Boolean) : [];
 
-  // Step 10: Get recent commits
-  const commitsRaw    = exec('git log --oneline -5', { cwd: process.cwd() });
+  // Step 10: Get recent commits (Task 3: restored to -15 to match
+  // agents/commit-orchestrator.md "Last 15 commits" and skills/commit-sdlc/SKILL.md)
+  const commitsRaw    = exec('git log --oneline -15', { cwd: process.cwd() });
   const recentCommits = commitsRaw ? commitsRaw.split('\n').filter(Boolean) : [];
 
   // Step 11: Get last commit message when amending
@@ -641,4 +782,7 @@ if (require.main === module) {
   }
 }
 
-module.exports = { parseArgs, resolveDefaultBranch, detectWipSquash, runSquash, runStashTransaction };
+module.exports = {
+  parseArgs, resolveDefaultBranch, detectWipSquash, runSquash, runStashTransaction,
+  classifyCommitFailure, detectPreCommitHook,
+};

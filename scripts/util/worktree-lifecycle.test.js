@@ -76,7 +76,7 @@ test('parseWorktreeList: empty output yields empty array', () => {
 // resolveWorktree (injected spawnFn / resolveMainWorktreeFn — no real worktrees)
 // ---------------------------------------------------------------------------
 
-test('resolveWorktree: match found returns path + mainWorktree + branch', () => {
+test('resolveWorktree: match found returns path + mainWorktree + branch + exists + matchedBy', () => {
   const porcelain =
     'worktree /repo/main\nHEAD abc\nbranch refs/heads/main\n\n' +
     'worktree /repo/.sdlc/worktrees/feat-x\nHEAD def\nbranch refs/heads/feat/x\n\n';
@@ -84,6 +84,7 @@ test('resolveWorktree: match found returns path + mainWorktree + branch', () => 
   const result = resolveWorktree('feat/x', {
     spawnFn: fakeSpawn(0, porcelain, ''),
     resolveMainWorktreeFn: () => '/repo/main',
+    existsFn: () => true,
   });
 
   assert.deepStrictEqual(result, {
@@ -91,7 +92,70 @@ test('resolveWorktree: match found returns path + mainWorktree + branch', () => 
     path: '/repo/.sdlc/worktrees/feat-x',
     mainWorktree: '/repo/main',
     branch: 'feat/x',
+    exists: true,
+    matchedBy: 'branch',
   });
+});
+
+test('resolveWorktree: exists:false when existsFn returns false', () => {
+  const porcelain =
+    'worktree /repo/main\nHEAD abc\nbranch refs/heads/main\n\n' +
+    'worktree /repo/.sdlc/worktrees/feat-x\nHEAD def\nbranch refs/heads/feat/x\n\n';
+
+  const result = resolveWorktree('feat/x', {
+    spawnFn: fakeSpawn(0, porcelain, ''),
+    resolveMainWorktreeFn: () => '/repo/main',
+    existsFn: () => false,
+  });
+
+  assert.strictEqual(result.found, true);
+  assert.strictEqual(result.exists, false);
+  assert.strictEqual(result.matchedBy, 'branch');
+});
+
+test('resolveWorktree: cwd fallback matches toplevel against entry paths when branch does not match', () => {
+  const porcelain =
+    'worktree /repo/main\nHEAD abc\nbranch refs/heads/main\n\n' +
+    'worktree /repo/.sdlc/worktrees/feat-x\nHEAD def\nbranch refs/heads/feat/x\n\n';
+
+  const result = resolveWorktree('feat/does-not-exist', {
+    spawnFn: fakeSpawn(0, porcelain, ''),
+    resolveMainWorktreeFn: () => '/repo/main',
+    toplevelFn: () => '/repo/.sdlc/worktrees/feat-x',
+  });
+
+  assert.deepStrictEqual(result, {
+    found: true,
+    path: '/repo/.sdlc/worktrees/feat-x',
+    mainWorktree: '/repo/main',
+    branch: 'feat/x',
+    exists: true,
+    matchedBy: 'cwd',
+  });
+});
+
+test('resolveWorktree: cwd fallback with no toplevel match still returns found:false with mainWorktree', () => {
+  const porcelain = 'worktree /repo/main\nHEAD abc\nbranch refs/heads/main\n\n';
+
+  const result = resolveWorktree('feat/does-not-exist', {
+    spawnFn: fakeSpawn(0, porcelain, ''),
+    resolveMainWorktreeFn: () => '/repo/main',
+    toplevelFn: () => '/unrelated/dir',
+  });
+
+  assert.deepStrictEqual(result, { found: false, mainWorktree: '/repo/main' });
+});
+
+test('resolveWorktree: cwd fallback skipped when toplevelFn returns null', () => {
+  const porcelain = 'worktree /repo/main\nHEAD abc\nbranch refs/heads/main\n\n';
+
+  const result = resolveWorktree('feat/does-not-exist', {
+    spawnFn: fakeSpawn(0, porcelain, ''),
+    resolveMainWorktreeFn: () => '/repo/main',
+    toplevelFn: () => null,
+  });
+
+  assert.deepStrictEqual(result, { found: false, mainWorktree: '/repo/main' });
 });
 
 test('resolveWorktree: no match returns found:false with mainWorktree', () => {
@@ -116,12 +180,13 @@ test('resolveWorktree: git worktree list failure surfaces stderr in error', () =
   assert.match(result.error, /git worktree list failed/);
 });
 
-test('resolveWorktree: main-worktree resolution failure returns found:false with error', () => {
+test('resolveWorktree: main-worktree resolution failure returns found:false with mainWorktree:null', () => {
   const result = resolveWorktree('feat/x', {
     resolveMainWorktreeFn: () => { throw new Error('boom'); },
   });
 
   assert.strictEqual(result.found, false);
+  assert.strictEqual(result.mainWorktree, null);
   assert.match(result.error, /Could not resolve main worktree: boom/);
 });
 

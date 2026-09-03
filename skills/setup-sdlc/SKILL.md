@@ -53,13 +53,16 @@ Run `skill/setup.js` via Bash to get current state:
 > **VERBATIM** -- Run this bash block exactly as written, invoking the script with `node` and its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin; the strict script location pattern is `<PLUGIN_ROOT>/scripts/<group>/<script-name>.js`, where `<group>` is one of `skill`, `util`, `lib`, `state`, or `ci`). There is no shell wrapper — always call `node` on the `.js` file directly. Do not modify, rephrase, or simplify the commands.
 
 ```shell
-node "<PLUGIN_ROOT>/scripts/skill/setup.js" $ARGUMENTS
+PREPARE_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/setup.js" $ARGUMENTS)
+EXIT_CODE=$?
+echo "PREPARE_OUTPUT_FILE=$PREPARE_OUTPUT_FILE"
+echo "EXIT_CODE=$EXIT_CODE"
 ```
 > **Contract (Input/Output):**
 > - **Input**: None.
-> - **Output**: Prints JSON manifest of current SDLC configuration state.
+> - **Output**: Prints the path of a temp JSON manifest (via `writeOutput`).
 
-Parse the JSON output from `$PREPARE_OUTPUT_FILE`. If exit code != 0, display the error and stop.
+Parse the JSON output from `$PREPARE_OUTPUT_FILE`. If exit code != 0, display the error and stop. Delete the manifest with `rm -f "$PREPARE_OUTPUT_FILE"` once parsed — do not leave it behind.
 
 **Outdated CI scripts warning:** After parsing, check `prepare.scriptVersions.outdatedCount`. If `outdatedCount > 0`, print a visible warning before continuing:
 
@@ -73,7 +76,17 @@ Do not auto-fix. Do not block the rest of setup. This is a report-only warning (
 
 **Flag routing (check after pre-flight succeeds):**
 
-Each direct-entry flag (`--dimensions`, `--pr-template`, `--guardrails`, `--execution-guardrails`, `--openspec-enrich`) is sugar for the `--only <id>` value shown for it in the Arguments table above. If any is passed (and `--only` is not), translate it into `--only <id>`. If `--only <ids>` is passed (directly or via translation), skip Step 1's menu and proceed to Step 2 → Step 3 with `selectedIds = <ids>`. Pass through `--add`, `--no-copilot`, and `--remove-openspec` to the relevant sub-flow when invoked.
+Each direct-entry flag is sugar for the `--only <id>` value below. If any is passed (and `--only` is not), translate it into `--only <id>`:
+
+| Flag | `--only` id |
+|------|-------------|
+| `--dimensions` | `review-dimensions` |
+| `--pr-template` | `pr-template` |
+| `--guardrails` | `plan-guardrails` |
+| `--execution-guardrails` | `execution-guardrails` |
+| `--openspec-enrich` | `openspec-block` |
+
+If `--only <ids>` is passed (directly or via translation), skip Step 1's menu and proceed to Step 2 → Step 3 with `selectedIds = <ids>`. Pass through `--add`, `--no-copilot`, and `--remove-openspec` to the relevant sub-flow when invoked.
 
 If none of the direct-entry flags or `--only` were passed: continue with the full interactive flow (Steps 1 → 2 → 3 → 5).
 
@@ -167,15 +180,18 @@ Options:
 On **yes**: there is no separate migration command to run, and no automatic migration happens on read — `lib/config.js::readLocalConfig` is a pure read with no write path, and `config-version.js::verifyAndMigrate` never migrates either (its own docstring: "No migrations are performed"; it always returns `migrated: false`). The actual fix is to go through the `ship` section in Step 3 below: `writeLocalConfig` does a top-level merge, so writing a fresh `ship` value there fully replaces the old `preset`/`skip` object and stamps the current `schemaVersion` in the same write. Re-run the Step 0 prepare command first to refresh state, then proceed to Step 3 and select the `ship` section:
 
 ```shell
-node "<PLUGIN_ROOT>/scripts/skill/setup.js" $ARGUMENTS
+PREPARE_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/setup.js" $ARGUMENTS)
+EXIT_CODE=$?
+echo "PREPARE_OUTPUT_FILE=$PREPARE_OUTPUT_FILE"
+echo "EXIT_CODE=$EXIT_CODE"
 ```
 > **Contract (Input/Output):**
 > - **Input**: None.
-> - **Output**: Prints JSON manifest of current SDLC configuration state, with `legacy` and `projectConfig.misplaced` refreshed.
+> - **Output**: Prints the path of a temp JSON manifest (via `writeOutput`), with `legacy` and `projectConfig.misplaced` refreshed.
 
 If `prepare.legacy.jiraTemplates.exists` is true, report the `.sdlc/jira-templates/` directory as a leftover the user may delete manually — nothing migrates it automatically.
 
-Parse the refreshed output. Report what was migrated:
+Parse the refreshed output from `$PREPARE_OUTPUT_FILE`. Delete the manifest with `rm -f "$PREPARE_OUTPUT_FILE"` once parsed — do not leave it behind. Report what was migrated:
 - List each file from `migrated` array
 - List each file from `conflicts` array with explanation: "Conflict: unified config already has this section -- legacy file was NOT merged"
 
@@ -369,7 +385,7 @@ Otherwise, ask the user to confirm the diff via AskUserQuestion (suppressed when
 After collecting all answers AND confirming the diff preview above, write project config and local config via `util/setup-init.js`:
 
 ```shell
-node "<PLUGIN_ROOT>/scripts/util/setup-init.js" --output-file --project-config '<PROJECT_CONFIG_JSON>' --local-config '<LOCAL_CONFIG_JSON>'
+SETUP_INIT_FILE=$(node "<PLUGIN_ROOT>/scripts/util/setup-init.js" --output-file --project-config '<PROJECT_CONFIG_JSON>' --local-config '<LOCAL_CONFIG_JSON>')
 ```
 > **Contract (Input/Output):**
 > - **Input**: Configuration parameters.
@@ -377,7 +393,7 @@ node "<PLUGIN_ROOT>/scripts/util/setup-init.js" --output-file --project-config '
 
 Replace `<PROJECT_CONFIG_JSON>` and `<LOCAL_CONFIG_JSON>` with the actual config objects assembled during Step 3's dispatch loop. Only include sections that were configured (not skipped).
 
-The command prints the manifest path on stdout; read that file and parse the JSON. Delete the manifest with `rm -f` once parsed — do not leave it behind.
+The command prints the manifest path on stdout; read `$SETUP_INIT_FILE` and parse the JSON. Delete the manifest with `rm -f "$SETUP_INIT_FILE"` once parsed — do not leave it behind.
 
 Display created files, check for errors. The `setup-init.js` script deterministically creates `.sdlc/` directory, `.sdlc/.gitignore`, writes config files via `writeProjectConfig` and `writeLocalConfig` (read-merge-write, so existing sections are preserved), and ensures a managed `.gitignore` block exists in the project root listing transient skill artifact patterns (`*-context-*.json`, `*-manifest-*.json`, `*-prepare-*.json`). The managed block is delimited by sentinel comments (`# >>> lift-sdlc managed`/`# <<< lift-sdlc managed`) and is idempotent — re-running setup-sdlc replaces the block contents in place rather than duplicating. Existing user content in `.gitignore` is preserved.
 

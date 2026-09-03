@@ -35,7 +35,7 @@ node "<PLUGIN_ROOT>/scripts/util/worktree-lifecycle.js" resolve --branch <branch
 Example output when the branch has a linked worktree:
 
 ```json
-{"found":true,"path":"/Users/dev/myrepo/.worktrees/feat-my-feature","mainWorktree":"/Users/dev/myrepo","branch":"feat/my-feature"}
+{"found":true,"path":"/Users/dev/myrepo/.worktrees/feat-my-feature","mainWorktree":"/Users/dev/myrepo","branch":"feat/my-feature","exists":true,"matchedBy":"branch"}
 ```
 
 Example output when it does not:
@@ -44,7 +44,7 @@ Example output when it does not:
 {"found":false,"mainWorktree":"/Users/dev/myrepo"}
 ```
 
-`mainWorktree` is present in both shapes — read it regardless of `found`. Here the main working tree is `/Users/dev/myrepo`, so the state file is written to `/Users/dev/myrepo/.sdlc/execution/`.
+`mainWorktree` is present in every shape the script emits — including the error shape, where it is `null` when the main worktree itself couldn't be resolved — so read it regardless of `found`. Here the main working tree is `/Users/dev/myrepo`, so the state file is written to `/Users/dev/myrepo/.sdlc/execution/`.
 
 If there are no linked worktrees, `mainWorktree` is the current repo root. Never hand-parse the porcelain worktree listing to derive this — the script does that parsing and main-worktree detection for you.
 

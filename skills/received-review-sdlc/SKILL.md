@@ -120,14 +120,17 @@ If the system context contains "Plan mode is active":
 When a PR number or URL is provided (via arguments or user input), run the prepare script to pre-compute review thread state:
 
 ```shell
-node "<PLUGIN_ROOT>/scripts/skill/received-review.js" --output-file $ARGUMENTS
+MANIFEST_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/received-review.js" --output-file $ARGUMENTS)
+EXIT_CODE=$?
+echo "MANIFEST_FILE=$MANIFEST_FILE"
+echo "EXIT_CODE=$EXIT_CODE"
 ```
 
 > **Contract (Input/Output):**
 > - **Input**: No arguments required (automatically infers PR from git branch context).
-> - **Output**: Prints JSON manifest of review comments to `stdout`. On success (exit 0), read the manifest JSON to extract `flags.auto`. On exit 1, no PR found.
+> - **Output**: Prints the path of a temp JSON manifest of review comments on stdout. On success (exit 0), read `$MANIFEST_FILE` to extract `flags.auto`. On exit 1, no PR found.
 
-**On exit code 0:** Read the manifest JSON. Extract `flags.auto` from the manifest and store it as a boolean (defaults to `false` if absent). If `--auto` was passed in `$ARGUMENTS` but not in the manifest, treat it as `true`. Display the incremental summary:
+**On exit code 0:** Read the manifest JSON at `$MANIFEST_FILE`. Extract `flags.auto` from the manifest and store it as a boolean (defaults to `false` if absent). If `--auto` was passed in `$ARGUMENTS` but not in the manifest, treat it as `true`. Display the incremental summary:
 
 ```
 Found N outstanding comments (M resolved, K already replied, J stale — skipped).
@@ -397,14 +400,17 @@ JSON
 > the last 100 lines of `.sdlc/learnings/log.md`, 4096-char failure-text synthesis, and auto-mode
 > matrix resolution from `flags.auto` × `flags.alwaysHardenFromReview` (never re-read raw
 > `$ARGUMENTS` or config directly). Exit 0: JSON `{ mode, clusters[], suppressedByCap,
-> suppressedByRerun, deferredLogEntry }` on stdout, where `mode` is one of `interactive-consent |
+> suppressedByRerun, skippedNullHints, deferredLogEntry }` on stdout, where `suppressedByRerun` is
+> the number of clusters dropped by the KD7 re-run guard and `skippedNullHints` is the number of
+> otherwise-clusterable findings excluded because `hardenSurfaceHint` or `hardenTargetFileHint` was
+> null (they have no cluster key, so they are counted rather than silently dropped). `mode` is one of `interactive-consent |
 > interactive-always | auto-defer | auto-always` and each cluster carries `surface`, `targetFile`,
 > `findingCount`, `findingIds`, `verdictMix`, `failureText`, `preview200`. Exit 1/2: script error —
 > treat as best-effort failure per the rule above, skip the rest of this step.
 
 Emit step-emitter: `meta-analyze-findings` — started:
 ```
-Step 11.6 — meta-analyze-findings: started | clusterCount=<N> surfaces=[<list>]
+Step 11.6 — meta-analyze-findings: started | clusterCount=<N> surfaces=[<list>] suppressedByRerun=<N> skippedNullHints=<N>
 ```
 
 Branch on `mode`:

@@ -20,7 +20,7 @@ try {
   // exactly the anomalous condition this guard must not treat as
   // "nothing to check here" (a malformed payload must not let
   // `git push --force`/`reset --hard`/`checkout .`/`clean -f` through unchecked).
-  process.stdout.write(JSON.stringify({ decision: 'deny', reason: 'guard hook could not parse tool-call input' }) + '\n');
+  process.stdout.write(JSON.stringify({ decision: 'deny', reason: 'pre-tool-git-guard.js: could not parse tool-call input as JSON (fail-closed). If this repeats for every command, the host is sending malformed payloads — inspect hooks.json or temporarily disable this hook.' }) + '\n');
   process.exit(0);
 }
 

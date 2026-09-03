@@ -18,11 +18,11 @@ Thin dispatcher — runs the prepare script, then delegates everything to the
 > **VERBATIM** — Run this command exactly as written, invoking the script with `node` and its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict script location pattern: `<PLUGIN_ROOT>/scripts/<group>/<script-name>.js`, where `<group>` is one of `skill`, `util`, `lib`, `state`, or `ci`). There is no shell wrapper — always call `node` on the `.js` file directly. Do not modify, rephrase, or simplify the commands.
 
 ```shell
-MANIFEST_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/review.js" $ARGUMENTS --json)
+MANIFEST_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/review.js" $ARGUMENTS)
 EXIT_CODE=$?
 ```
 
-`review.js` forwards `$ARGUMENTS` verbatim before the fixed `--json` flag, writes its JSON payload to a temp file, and prints only that path to stdout — there is no `MANIFEST_FILE:` / `STATUS:` preamble to parse. `EXIT_CODE` is the script's own exit status.
+`review.js` forwards `$ARGUMENTS` verbatim, writes its JSON payload to a temp file, and prints only that path to stdout — there is no `MANIFEST_FILE:` / `STATUS:` preamble to parse, and no `--json` flag to pass (`review.js` does not parse one; the manifest-file protocol is unconditional). `EXIT_CODE` is the script's own exit status.
 
 **On non-zero `EXIT_CODE`:** exit 1 → show the stderr message and stop; exit 2 → show `Script error — see output above`, then invoke error-report-sdlc (Glob `**/error-report-sdlc/REFERENCE.md`, follow with skill=review-sdlc, step=Step 0 — skill/review.js execution, error=stderr) and stop.
 

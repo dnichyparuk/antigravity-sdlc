@@ -216,6 +216,50 @@ function evaluateRule(validRules, context) {
   return suggestedLabels;
 }
 
+/**
+ * Validates pr.labels.rules structural correctness and label existence
+ * (implements R-labels-2, issue #197). Also flags `jiraType` rules: pr.js
+ * has no Jira API access (see the `jiraType: null` note in main()), so a
+ * `jiraType` rule structurally passes validation and stays in validRules,
+ * but it can never match at evaluation time — a warning surfaces that.
+ * @param {Array} rules - raw pr.labels.rules array from config
+ * @param {string[]} repoLabelNames - known repo label names
+ * @param {string[]} knownSignals - allowed when.<signal> keys
+ * @returns {{ validRules: Array<{label: string, when: object}>, warnings: string[] }}
+ */
+function validateLabelRules(rules, repoLabelNames, knownSignals) {
+  const validRules = [];
+  const warnings = [];
+  for (const rule of rules) {
+    if (!rule || typeof rule !== 'object' || typeof rule.label !== 'string') {
+      continue;
+    }
+    // Validate structural correctness of rule.when (implements R-labels-2)
+    if (!rule.when || typeof rule.when !== 'object') {
+      warnings.push(`Rule for label "${rule.label}" is missing a "when" condition. Rule will be ignored.`);
+      continue;
+    }
+    const whenKeys = Object.keys(rule.when);
+    if (whenKeys.length !== 1) {
+      warnings.push(`Rule for label "${rule.label}" has ${whenKeys.length === 0 ? 'no' : 'multiple'} signal keys in "when" (expected exactly 1). Rule will be ignored.`);
+      continue;
+    }
+    if (!knownSignals.includes(whenKeys[0])) {
+      warnings.push(`Rule for label "${rule.label}" uses unknown signal "${whenKeys[0]}" in "when". Valid signals: ${knownSignals.join(', ')}. Rule will be ignored.`);
+      continue;
+    }
+    if (!repoLabelNames.includes(rule.label)) {
+      warnings.push(`Label "${rule.label}" referenced in pr.labels.rules does not exist in the repo. Rule will be ignored.`);
+      continue;
+    }
+    if (whenKeys[0] === 'jiraType') {
+      warnings.push(`label rule '${rule.label}' uses \`jiraType\`, which pr.js does not evaluate (no Jira lookup) — rule will never match`);
+    }
+    validRules.push(rule);
+  }
+  return { validRules, warnings };
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -547,32 +591,9 @@ function main() {
   // mode = "off" or "llm" leaves rules untouched.
   let suggestedLabels = [];
   if (prConfig && prConfig.labels && prConfig.labels.mode === 'rules' && Array.isArray(prConfig.labels.rules)) {
-    const validRules = [];
     const knownSignals = ['branchPrefix', 'commitType', 'pathGlob', 'jiraType', 'diffSizeUnder'];
-    for (const rule of prConfig.labels.rules) {
-      if (!rule || typeof rule !== 'object' || typeof rule.label !== 'string') {
-        continue;
-      }
-      // Validate structural correctness of rule.when (implements R-labels-2)
-      if (!rule.when || typeof rule.when !== 'object') {
-        warnings.push(`Rule for label "${rule.label}" is missing a "when" condition. Rule will be ignored.`);
-        continue;
-      }
-      const whenKeys = Object.keys(rule.when);
-      if (whenKeys.length !== 1) {
-        warnings.push(`Rule for label "${rule.label}" has ${whenKeys.length === 0 ? 'no' : 'multiple'} signal keys in "when" (expected exactly 1). Rule will be ignored.`);
-        continue;
-      }
-      if (!knownSignals.includes(whenKeys[0])) {
-        warnings.push(`Rule for label "${rule.label}" uses unknown signal "${whenKeys[0]}" in "when". Valid signals: ${knownSignals.join(', ')}. Rule will be ignored.`);
-        continue;
-      }
-      if (!repoLabelNames.includes(rule.label)) {
-        warnings.push(`Label "${rule.label}" referenced in pr.labels.rules does not exist in the repo. Rule will be ignored.`);
-        continue;
-      }
-      validRules.push(rule);
-    }
+    const { validRules, warnings: ruleWarnings } = validateLabelRules(prConfig.labels.rules, repoLabelNames, knownSignals);
+    warnings.push(...ruleWarnings);
     prConfig = {
       ...prConfig,
       labels: { ...prConfig.labels, rules: validRules },
@@ -698,4 +719,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { parseArgs, detectIssueTicket, detectPrMode, matchRule, evaluateRule };
+module.exports = { parseArgs, detectIssueTicket, detectPrMode, matchRule, evaluateRule, validateLabelRules };

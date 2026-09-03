@@ -44,17 +44,18 @@ On **no**: stop. Print "Retag cancelled."
 Run the retag transaction script — it deletes the local and the remote tag, recreates the annotated tag at HEAD, pushes it, and verifies that the tag now resolves to HEAD:
 
 ```shell
-node "<PLUGIN_ROOT>/scripts/util/version-execute.js" retag --tag <currentTag>
+node "<PLUGIN_ROOT>/scripts/util/version-execute.js" retag --tag <currentTag> --expected-head "<head>"
 ```
 
 > **Contract (Input/Output):**
-> - **Input**: `--tag <currentTag>` (required).
-> - **Output**: one JSON line — `{"status":"ok","tag":"<currentTag>"}` on success, with additive `verified: false` and a `warning` string when the tag does not resolve to HEAD; `{"status":"failed","recovered":<bool>,"failedStep":"...","reason":"..."}` on failure.
+> - **Input**: `--tag <currentTag>` (required). `--expected-head "<head>"` — the `head` SHA from Step 1's prepare output, i.e. the exact commit the user approved in Step 2. Passing it makes verification (step 5 of the transaction) compare the tag against that approved SHA instead of a freshly re-derived `HEAD`, which could have moved between approval and execution.
+> - **Output**: one JSON line — `{"status":"ok","tag":"<currentTag>"}` on success, with additive `verified: false` and a `warning` string when `--expected-head` was omitted and the tag does not resolve to HEAD; `{"status":"failed","recovered":<bool>,"failedStep":"...","reason":"..."}` on a git-command failure; `{"status":"failed","failedStep":"verify","reason":"tag points at <a>, approved head was <b>"}` when `--expected-head` was given and the tag landed on a different commit than the one approved.
 
 Branch on the result:
-- `{"status":"ok","tag":"<currentTag>"}` — the retag landed. Continue to Step 4.
-- `{"status":"ok", ..., "verified":false, "warning":"..."}` — the retag itself succeeded but the tag does not resolve to HEAD. Show `warning`, then continue to Step 4 so the user can verify manually.
-- `{"status":"failed", ...}` — show `failedStep` and `reason`, then stop. Do not retry. `recovered: true` means the local tag was recreated at the SHA it pointed to before the retag, so a plain `git push origin <currentTag>` restores the previous remote state; `recovered: false` means the local tag could not be restored and the user must recreate it manually.
+- `{"status":"ok","tag":"<currentTag>"}` — the retag landed and matches the approved head. Continue to Step 4.
+- `{"status":"ok", ..., "verified":false, "warning":"..."}` — (only possible without `--expected-head`) the retag itself succeeded but the tag does not resolve to HEAD. Show `warning`, then continue to Step 4 so the user can verify manually.
+- `{"status":"failed","failedStep":"verify", ...}` — the tag was moved successfully but landed on a commit other than the approved `head`. Show `reason` (it names both SHAs) and stop; do not treat this as complete.
+- `{"status":"failed", ...}` with any other `failedStep` — show `failedStep` and `reason`, then stop. Do not retry. `recovered: true` means the local tag was recreated at the SHA it pointed to before the retag, so a plain `git push origin <currentTag>` restores the previous remote state; `recovered: false` means the local tag could not be restored and the user must recreate it manually.
 
 ### Step 4 (REPORT): Summary
 

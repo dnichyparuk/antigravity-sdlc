@@ -6,8 +6,9 @@
     "node": "^20.19.0 || ^22.13.0 || >=24"
   },
   "scripts": {
-    "test": "node --test 'scripts/**/*.test.js' 'skills/**/*.test.js'",
-    "lint": "eslint scripts skills"
+    "test": "node --test 'scripts/**/*.test.js' 'skills/**/*.test.js' 'hooks/**/*.test.js'",
+    "lint": "eslint scripts skills",
+    "check:refs": "node scripts/ci/validate-skill-script-refs.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

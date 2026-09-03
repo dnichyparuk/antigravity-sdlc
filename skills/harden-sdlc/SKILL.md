@@ -29,6 +29,9 @@ next time. Implements `docs/specs/harden-sdlc.md`.
 If neither `--failure-text` nor `--from-issue` is present, stop with an error
 message.
 
+`--failure-text` and `--from-issue` are mutually exclusive — the prepare
+script exits 1 with a message if both are passed.
+
 Required flag (always): `--skill`. Optional: `--step`, `--operation`,
 `--exit-code`, `--error-type`, `--user-intent`, `--args-string`.
 
@@ -187,26 +190,35 @@ Options: **apply** | **skip** | **cancel**
 
 ### 5a. Validate Before Committing
 
-When the user selects **apply**:
+When the user selects **apply**, write the proposed merged content to a
+sibling temp path — `<target>.harden-tmp` — and validate that temp path
+before it ever touches the real file, so `.sdlc/config.json` (or the
+dimension file) is never transiently invalid:
 
 - For `surface == "plan-guardrails"` / `"execute-guardrails"` (target
-  `.sdlc/config.json`) or `surface == "review-dimensions"` (target the
-  dimension file): keep the file's current content in memory, write the
-  proposed merged content to `targetFile`, then validate the file on disk —
-  both validators read from disk, not from an in-memory value:
+  `.sdlc/config.json`): write the merged config to
+  `.sdlc/config.json.harden-tmp`, then validate that temp path:
 
   ```shell
-  node "<PLUGIN_ROOT>/scripts/ci/validate-guardrails.js" --project-root .
-  node "<PLUGIN_ROOT>/scripts/util/validate-dimension.js" "<targetFile>"
+  node "<PLUGIN_ROOT>/scripts/ci/validate-guardrails.js" --project-root "<target>.harden-tmp"
   ```
-  > **Contract (Input/Output):** validates `.sdlc/config.json` / `<targetFile>`
-  > as it currently exists on disk; exits non-zero if the schema is invalid.
 
-  On non-zero exit, restore `targetFile` to the content you kept in memory
-  before writing — never leave a schema-invalid file on disk — surface the
-  validator's error, and use AskUserQuestion to offer **retry** (let the user
-  adjust the patch inline) or **cancel** (skip this proposal). On success, the
-  write already on disk stands — no separate write step follows.
+- For `surface == "review-dimensions"` (target the dimension file): write the
+  merged content to `<targetFile>.harden-tmp`, then validate that temp path:
+
+  ```shell
+  node "<PLUGIN_ROOT>/scripts/util/validate-dimension.js" "<targetFile>.harden-tmp"
+  ```
+
+  > **Contract (Input/Output):** validates the `.harden-tmp` path as written;
+  > exits non-zero if the schema is invalid.
+
+  On success: `fs.renameSync(tmp, target)` (or `mv`) — this is the only write
+  the real path ever receives, and it happens only after validation passes.
+  On non-zero exit: delete the temp file, surface the validator's error, and
+  use AskUserQuestion to offer **retry** (let the user adjust the patch
+  inline) or **cancel** (skip this proposal). Never silently commit a
+  schema-invalid edit.
 
 - For `surface == "copilot-instructions"`: no schema — apply the edit with
   Edit (preferred) or Write directly.
@@ -315,6 +327,8 @@ the `.sdlc/learnings/` directory and `log.md` file if they don't exist.
 
 ## DO NOT
 
+- Edit any surface without an `apply` AskUserQuestion answer recorded for
+  that specific proposal — the no-silent-write invariant is non-negotiable.
 - Violate the Step 5 per-iteration contract (re-read before acting, write
   before advancing, no cross-proposal state).
 - Propose relaxing or removing existing rules — v1 is strengthen-only.

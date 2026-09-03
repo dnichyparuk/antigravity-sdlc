@@ -94,15 +94,17 @@ Use the `Agent` tool with:
 - `model`: `gemini-3.7-flash-low` — the Agent tool's `model:` param takes precedence
   over agent frontmatter, keeping this bounded task on a lightweight model regardless
   of the parent context's model
-- `prompt` (exactly two lines, no other content):
+- `prompt` (exactly three lines, no other content):
 
   ```text
   MANIFEST_FILE: <ERROR_CONTEXT_FILE>
   PROJECT_ROOT: <cwd>
+  PLUGIN_ROOT: <PLUGIN_ROOT>
   ```
 
   Substitute `<ERROR_CONTEXT_FILE>` with the absolute temp-file path captured in
-  Step 3. Substitute `<cwd>` with the current working directory.
+  Step 3. Substitute `<cwd>` with the current working directory. Substitute
+  `<PLUGIN_ROOT>` with the same absolute plugin path used in Step 3.
 
 The orchestrator reads the manifest, reads
 `skills/error-report-sdlc/templates/ToolingError.md`, fills
@@ -111,7 +113,7 @@ manifest fields are empty, and returns ONLY a JSON object `{ "title": ..., "body
 (full contract: `agents/error-report-orchestrator.md`). The orchestrator does not call
 `gh`, does not call `git`, does not write any file.
 
-Capture the returned object as `PROPOSAL = { title, body }`. If the parse fails, stop.
+Capture the returned object as `PROPOSAL = { title, body }`. If the parse fails, log the raw orchestrator output to stderr and stop. Do NOT dispatch error-report-sdlc for this failure (recursion guard).
 
 ### Step 5 — Consent Gate 2: Review (main context)
 
@@ -125,7 +127,8 @@ calling skill's name) and the priority. Use `AskUserQuestion` for the
 small edits) and re-present.
 
 **On `cancel`:** Return to the calling skill's normal error handling. Do not
-create anything — `$ERROR_CONTEXT_FILE` is cleaned up automatically (see Step 7).
+create anything — `$ERROR_CONTEXT_FILE` is cleaned up automatically (see the
+`rm -f "$ERROR_CONTEXT_FILE"` step in Step 7).
 
 **On `yes`:** Continue to Step 6.
 
@@ -160,6 +163,8 @@ error output or stop behavior.
 ## DO NOT
 
 - Invoke this skill directly in response to user requests — it is internal only.
+- Recursively dispatch this skill on its own prepare-script **or orchestrator**
+  crash — log to stderr and stop.
 - Pin `model:` in this skill's frontmatter. The orchestrator agent (Step 4) is the
   correct place to pin `model: gemini-3.7-flash-low`.
 - Run consent gates or `gh issue create` inside the orchestrator agent — it has no

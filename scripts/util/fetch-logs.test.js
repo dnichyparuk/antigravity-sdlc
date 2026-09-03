@@ -198,7 +198,13 @@ test('fetchLogs exits 0 with empty stdout when the log fetch itself fails', () =
   assert.strictEqual(res.stderr, '');
 });
 
-test('fetchLogs exits 0 and surfaces errorMessage when gh is unauthenticated', () => {
+// ---------------------------------------------------------------------------
+// fetchLogs — auth failure (exit 1, mirrors the invalid --pr-number path:
+// user-actionable, not a crash, and must not be mistaken for "no failed
+// checks" which exits 0 with empty stdout)
+// ---------------------------------------------------------------------------
+
+test('fetchLogs exits 1 and surfaces errorMessage when gh is unauthenticated', () => {
   const res = fetchLogs(['node', '/x/fetch-logs.js', '--pr-number', '7'], {
     fetchPrChecksFn: () => ({
       checks: [],
@@ -206,7 +212,7 @@ test('fetchLogs exits 0 and surfaces errorMessage when gh is unauthenticated', (
       errorMessage: 'Not logged in to github.com. Run: gh auth login --hostname github.com',
     }),
   });
-  assert.strictEqual(res.exitCode, 0);
+  assert.strictEqual(res.exitCode, 1);
   assert.strictEqual(res.stdout, '');
   assert.match(res.stderr, /Not logged in to github.com/);
 });

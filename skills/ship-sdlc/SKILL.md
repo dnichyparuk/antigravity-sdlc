@@ -55,8 +55,9 @@ If `--init-config` was passed:
 2. Call `ship-init.js` via Bash with the collected answers, substituting the user's walkthrough answers for the example values below (append `--quick <csv>` only when the user made a quick-profile selection):
 ```shell
 INIT_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/util/ship-init.js" --output-file --steps execute,commit,review,archive-openspec,pr --bump patch --auto --threshold high --workspace prompt)
+EXIT_CODE=$?
 echo "INIT_OUTPUT_FILE: $INIT_OUTPUT_FILE"
-echo "STATUS: $?"
+echo "STATUS: $EXIT_CODE"
 ```
 > **Contract (Input/Output):**
 > - **Input**: Pipeline initialization flags — `--steps <csv>`, `--bump patch|minor|major`, `--draft`, `--auto`, `--threshold critical|high|medium`, `--workspace branch|worktree|prompt`, `--rebase auto|skip|prompt`, and the optional `--quick <csv>`.
@@ -64,7 +65,8 @@ echo "STATUS: $?"
 3. Parse the output JSON from `$INIT_OUTPUT_FILE`:
    - If `errors` is non-empty, display them and stop.
    - Otherwise display the `created` files list and `config` JSON for user confirmation.
-4. Stop. No pipeline execution.
+4. Run `rm -f "$INIT_OUTPUT_FILE"` to clean up the temp output file.
+5. Stop. No pipeline execution.
 
 ### 1a-gc. --gc handler
 
@@ -72,12 +74,13 @@ If `--gc` (with optional `--ttl-days <N>`) was passed, run `skill/ship.js --gc` 
 
 ```shell
 PREPARE_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/ship.js" --output-file --gc)
+echo "PREPARE_OUTPUT_FILE=$PREPARE_OUTPUT_FILE"
 ```
 Append `--ttl-days <N>` to the same command when the user passed `--ttl-days`.
 
 > **Contract (Input/Output):**
 > - **Input**: None (optional `--ttl-days <N>`).
-> - **Output**: Garbage collects stale ship runs. Prints the temp JSON manifest path on stdout — assign it to `PREPARE_OUTPUT_FILE`; nothing else is echoed.
+> - **Output**: Garbage collects stale ship runs. Prints the temp JSON manifest path on stdout — assign it to `PREPARE_OUTPUT_FILE`; the block echoes the path.
 
 Read the prepare output. The top-level `action` field will be `"gc"`; the `report` field contains `{ttlDays, ship: {deleted, kept}, execute: {deleted, kept}}`.
 
@@ -87,7 +90,7 @@ Print one line per file:
 [kept]    ship-main-20260505T120000Z.json — ttl-fresh
 ```
 
-Then stop. Do not proceed to step 1b. The pipeline does not run.
+Run `rm -f "$PREPARE_OUTPUT_FILE"` to clean up the temp output file. Then stop. Do not proceed to step 1b. The pipeline does not run.
 
 ### 1b. Load ship config
 
@@ -111,18 +114,19 @@ If not found: `No ship config found — using built-in defaults. Run /setup-sdlc
 Run `skill/ship.js` to pre-compute flags, context, and step statuses:
 ```shell
 PREPARE_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/ship.js" --output-file --has-plan --auto)
+EXIT_CODE=$?
 echo "PREPARE_OUTPUT_FILE: $PREPARE_OUTPUT_FILE"
-echo "STATUS: $?"
+echo "STATUS: $EXIT_CODE"
 ```
 > **Contract (Input/Output):**
 > - **Input**: Current branch context, plus the conditional flags below.
-> - **Output**: Prints JSON manifest containing PR and ship status. `--output-file` makes stdout the manifest path; capture it into `PREPARE_OUTPUT_FILE`.
+> - **Output**: Prints the path of a temp JSON manifest (via `writeOutput`) containing PR and ship status. `--output-file` makes stdout the manifest path; capture it into `PREPARE_OUTPUT_FILE`.
 
 **Conditional flags — append to the invocation above only under the stated condition. Never add a flag "for completeness"; an unconditional flag overrides the user's config.**
 
 - **`--bump <type>`** — append ONLY when the user explicitly passed `--bump` to ship-sdlc. `skill/ship.js` otherwise resolves the bump from config (`version.preRelease`) or the `patch` default. Passing `--bump` unconditionally would override config and break pre-release trains.
-- **Workspace mode** — intentionally omitted from the example above so it falls back to `.sdlc/local.json` → `ship.workspace` via `mergeFlags`. A literal `--workspace <value>` here would override user config. Append `--workspace <branch|worktree|prompt>`, `--branch`, or `--tree` ONLY when the user passed that override for this single run — e.g. `node "<PLUGIN_ROOT>/scripts/skill/ship.js" --output-file --has-plan --auto --tree`.
-- **`--steps <csv>`** — append ONLY when the user passed `--steps`. Pipeline composition otherwise comes from config `ship.steps[]` (top-level `schemaVersion: 4`). CLI `--steps` is a one-shot override, e.g. `--steps execute,commit,pr`. Legacy `--preset` / `--skip` are hard-removed — see "Step set validation matters" below.
+- **Workspace mode** — intentionally omitted from the example above so it falls back to `.sdlc/local.json` → `ship.workspace` via `mergeFlags`. A literal `--workspace <value>` here would override user config. Append `--workspace <branch|worktree|prompt>`, `--branch`, or `--tree` ONLY when the user passed that override for this single run — e.g. `PREPARE_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/ship.js" --output-file --has-plan --auto --tree)`.
+- **`--steps <csv>`** — append ONLY when the user passed `--steps`. Pipeline composition otherwise comes from config `ship.steps[]` (top-level `schemaVersion: 4`). CLI `--steps` is a one-shot override, e.g. `--steps execute,commit,pr`. Legacy `--preset` / `--skip` are hard-removed. Unrecognized `--steps` values (e.g. `--steps reviw`) are rejected by `ship.js parseArgs` with exit 1 and abort the run — typos never silently skip a step.
 - **`--quality <full|balanced|minimal>`** — append ONLY when the user explicitly passed `--quality`. It sets the model tier forwarded to execute-plan-sdlc; when absent, no quality flag is forwarded downstream.
 - **`--hook-active-pipeline`** — append when the session-start `<system-reminder>` contains a line matching `/^Active pipeline: ship-sdlc/` AND the user did NOT type `--resume`. This is the implicit-resume hook signal. `skill/ship.js` then inspects the ship state file for the current branch and, when found and fresh, sets `flags.implicitResume = true` AND `flags.resume = true`, so downstream steps treat the run as a resume without the user typing `--resume`. When no state file is found it emits `errors[*].id === "implicitResumeNoState"` — handled by the missing-state prompt in Step 1e.
 
@@ -224,7 +228,7 @@ Not all sub-skills support `--auto`. This table is the source of truth:
 | execute-plan-sdlc | No | Forwards `--quality <X>` only when the user explicitly passed `--quality` to ship; otherwise no quality flag is forwarded and execute-plan-sdlc applies its own selection logic. |
 | commit-sdlc | Yes | `--auto` forwarded. Skips commit approval prompt. |
 | review-sdlc | No | No interactive prompts to skip — runs fully automatically already. |
-| received-review-sdlc | Yes | `--auto` forwarded. Skips Step 10 consent prompt and Step 12 reply/resolve prompt. Critique gates and verification still run. Only "will fix" items auto-implemented; threads for "will fix" items auto-resolved. |
+| received-review-sdlc | Yes | `--auto` forwarded. Skips Step 10 consent prompt and Step 12 reply/resolve prompt. Critique gates and verification still run. Only "will fix" items auto-implemented; threads for "will fix" items auto-resolved. Items with 'disagree' / 'won't fix' / 'needs discussion' verdicts are never auto-actioned; only 'agree, will fix' is applied. |
 | version-sdlc | Yes | `--auto` forwarded. Skips release plan approval prompt. Pre-condition checks and critique gates still run. |
 | pr-sdlc | Yes | `--auto` forwarded. Skips PR approval prompt. |
 
@@ -313,6 +317,8 @@ Before dispatching each step, read its `status` from the skill/ship.js output:
 3. `"skipped"` → print "skipped" with the `reason` and `skipSource` from the script output.
 
 A step with `status: "will_run"` MUST be dispatched per its `dispatchMode`. The LLM does not have authority to override `dispatchMode` or skip a `will_run` step. Printing a skip message for a "will_run" step is a pipeline violation.
+
+**The LLM does not have authority to skip planned steps based on its own assessment of change complexity or risk** (added after the review step was skipped on a 'just docs/config' judgement — issue #68).
 
 ### Context budget — dispatch isolation
 
@@ -426,7 +432,7 @@ If false (resuming from the main worktree but the pipeline originally ran in a w
 ```bash
 node "<PLUGIN_ROOT>/scripts/util/worktree-lifecycle.js" resolve --branch <resume-branch>
 ```
-`resolve` prints `{"found":true,"path":"...","mainWorktree":"...","branch":"..."}` when the branch has a linked worktree — `cd <path>` before continuing. It prints `{"found":false,"mainWorktree":"..."}` when the worktree is gone — warn and fall back to running on the current branch.
+`resolve` prints `{"found":true,"path":"...","mainWorktree":"...","branch":"...","exists":true,"matchedBy":"branch"|"cwd"}` when the branch has a linked worktree (or the cwd itself matches one, when the branch name doesn't), or `{"found":false,"mainWorktree":"..."}` when no worktree matches. If `found` and `exists`, `cd <path>`. If `found` but not `exists`, warn `Worktree <path> is registered but missing — run git worktree prune; falling back to current branch` and continue on the current branch.
 
 **Execute-step todo mirroring:**
 
@@ -439,7 +445,7 @@ EXTRACT_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/util/extract-plan-file.js" "$S
 > - **Input**: One positional argument — the prepare output file path.
 > - **Output**: Prints the path of a temp JSON manifest on stdout. Read that file and `JSON.parse` it; the shape is `{ ok, planFile, errors }`. Exit 0 = success, 1 = validation error (`ok` is `false`, `errors[]` is non-empty), 2 = crash.
 
-Read `$EXTRACT_OUTPUT_FILE`, parse it, and set `PLAN_FILE` to its `.planFile` value. If `ok` is `false`, surface `errors[]` and stop.
+Read `$EXTRACT_OUTPUT_FILE`, parse it, and set `PLAN_FILE` to its `.planFile` value. If `ok` is `false`, surface `errors[]` and stop. Then run `rm -f "$EXTRACT_OUTPUT_FILE"` to clean up the temp output file.
 
 Where `$SHIP_PREPARE_OUTPUT_FILE` is the path to the temp file holding the `skill/ship.js` JSON output. When `PLAN_FILE` is empty, the `ship-todos.js` execute event will fail. Surface that error before dispatching.
 
@@ -531,7 +537,7 @@ If the `archive-openspec` step has `status: "conditional"` in the pipeline plan,
    > **Contract (Input/Output):**
    > - **Input**: One positional argument — the change `<name>`.
    > - **Output**: **Prints the path of a temp JSON manifest on stdout, not raw JSON.** Read that file and `JSON.parse` it; the shape is `{ ok, stdout, stderr, cliAvailable, errors }`. Exit 0 when `ok` is `true`, 1 when `ok` is `false`, 2 on crash.
-3. Read `$VALIDATE_OUTPUT_FILE` and parse it. **If `ok === false`:** halt the pipeline. Print the validation errors (`stderr` / `errors[]` from the manifest) and save state for `--resume`.
+3. Read `$VALIDATE_OUTPUT_FILE` and parse it. **If `ok === false`:** halt the pipeline. Print the validation errors (`stderr` / `errors[]` from the manifest) and save state for `--resume`. Then run `rm -f "$VALIDATE_OUTPUT_FILE"` to clean up the temp output file.
 4. **If `ok === true`:** prompt the user for approval (skip prompt in `--auto` mode).
 5. On approval, run the archive:
    ```shell
@@ -540,6 +546,8 @@ If the `archive-openspec` step has `status: "conditional"` in the pipeline plan,
    > **Contract (Input/Output):**
    > - **Input**: One positional argument — the change `<name>`.
    > - **Output**: Same temp-manifest-path + `{ ok, stdout, stderr, cliAvailable, errors }` contract as the validate step above. Exit 0 when `ok` is `true`, 1 when `ok` is `false`, 2 on crash.
+
+   Read `$ARCHIVE_OUTPUT_FILE` and parse it to confirm `ok === true` before continuing. Then run `rm -f "$ARCHIVE_OUTPUT_FILE"` to clean up the temp output file.
 6. If archive succeeds, commit it through the ship git-ops script:
    ```bash
    node "<PLUGIN_ROOT>/scripts/util/ship-git-ops.js" commit-openspec-archive --change '<name>'
@@ -639,6 +647,7 @@ The script owns the whole sequence: it fetches the base from `origin` (the remot
   Rebase: clean — replayed on origin/<defaultBranch> (HEAD now <sha>)
   ```
 - `{"status":"conflicts","files":["src/foo.ts", ...]}` — the rebase did not apply and has already been aborted for you. List `files` and handle per mode below.
+- `{"status":"fetch_failed","remote":"origin","base":"<defaultBranch>","error":"<stderr>"}` — the fetch itself failed (network, auth, unknown remote). Print "Could not fetch `<remote>/<base>`: `<error>` — skipping rebase; branch may be behind base" and continue (non-fatal, same posture as `conflicts`).
 
 **Auto mode:** Stop pipeline, save state for `--resume`. Print:
 ```
@@ -660,7 +669,7 @@ Rebase: CONFLICTS detected with origin/<defaultBranch>
 
 Option 3 fallback: run `git merge origin/<defaultBranch>`. If that also conflicts, abort and fall back to option 1.
 
-Note: in a worktree, all of this is safe — main working tree is untouched.
+Note: in a worktree, all of this is safe — main working tree is untouched (the script runs in the current cwd).
 
 ### State persistence
 
@@ -744,7 +753,7 @@ Detect whether a linked worktree is active by resolving the pipeline's branch th
 ```bash
 node "<PLUGIN_ROOT>/scripts/util/worktree-lifecycle.js" resolve --branch <branch>
 ```
-`resolve` prints `{"found":true,"path":"...","mainWorktree":"...","branch":"..."}` when the branch has a linked worktree, or `{"found":false,"mainWorktree":"..."}` when it does not — nothing to clean up in that case. A worktree is active when `found` is `true` and `path` differs from `mainWorktree`.
+`resolve` prints `{"found":true,"path":"...","mainWorktree":"...","branch":"...","exists":true,"matchedBy":"branch"|"cwd"}` when the branch has a linked worktree, or `{"found":false,"mainWorktree":"..."}` when it does not — nothing to clean up in that case. A worktree is active when `found` is `true` and `path` differs from `mainWorktree`. `matchedBy` is `"branch"` for the normal case and `"cwd"` when the branch name itself matched no entry but the current directory's toplevel did — either way the same `exists`/cleanup handling applies.
 
 **Auto mode:** keep (default). Print path and action:
 ```

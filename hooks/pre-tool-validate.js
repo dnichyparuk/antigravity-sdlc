@@ -21,7 +21,7 @@ try {
 } catch {
   // Stdin unreadable or non-JSON — fail closed, consistent with the other
   // PreToolUse guard hook (pre-tool-git-guard.js).
-  process.stdout.write(JSON.stringify({ decision: 'deny', reason: 'guard hook could not parse tool-call input' }) + '\n');
+  process.stdout.write(JSON.stringify({ decision: 'deny', reason: 'pre-tool-validate.js: could not parse tool-call input as JSON (fail-closed). If this repeats for every command, the host is sending malformed payloads — inspect hooks.json or temporarily disable this hook.' }) + '\n');
   process.exit(0);
 }
 

@@ -4,13 +4,13 @@
  * safe conflict fallback.
  *
  * Usage:
- *   node rebase-onto-base.js --base <branch>
+ *   node rebase-onto-base.js --base <branch> [--remote <name>]
  *
  * Behavior:
- *   1. `git fetch origin <base>` then `git merge-base --is-ancestor
- *      origin/<base> HEAD` to check whether the current branch already
- *      contains the base tip — no rebase needed.
- *   2. Otherwise attempts `git rebase origin/<base>`.
+ *   1. `git fetch <remote> <base>` (remote defaults to "origin") then
+ *      `git merge-base --is-ancestor <remote>/<base> HEAD` to check whether
+ *      the current branch already contains the base tip — no rebase needed.
+ *   2. Otherwise attempts `git rebase <remote>/<base>`.
  *   3. On conflict, collects the conflicting file paths and runs
  *      `git rebase --abort` so the repo is never left mid-rebase, then
  *      reports the conflict.
@@ -19,12 +19,16 @@
  *   {"status": "up_to_date"}
  *   {"status": "clean", "sha": "<new-head-sha>"}
  *   {"status": "conflicts", "files": ["path/a.js", "path/b.js"]}
+ *   {"status": "fetch_failed", "remote": "origin", "base": "main", "error": "<stderr>"}
  *
  * Exit codes:
- *   0 = always, for all three outcomes above — the caller (SKILL.md) branches
- *       on `status`, not exit code, since a conflict is a normal fallback
- *       outcome and not a script "crash".
+ *   0 = always, for all four outcomes above — the caller (SKILL.md) branches
+ *       on `status`, not exit code, since a conflict or fetch failure is a
+ *       normal fallback outcome and not a script "crash".
  *   1 = usage error (missing/unrecognized --base)
+ *
+ * Runs in the current cwd (not `resolveSdlcRoot()`) so the rebase applies to
+ * the active worktree/branch.
  *
  * Uses only Node.js built-in modules. No npm install required.
  */
@@ -34,7 +38,6 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const LIB = path.join(__dirname, '..', 'lib');
-const { resolveSdlcRoot } = require(path.join(LIB, 'config'));
 const { writeJsonLine } = require(path.join(LIB, 'output'));
 
 // ---------------------------------------------------------------------------
@@ -49,11 +52,11 @@ function getArg(args, name) {
 
 /**
  * @param {string[]} argv  Full argv (process.argv shape).
- * @returns {{base: string|null}}
+ * @returns {{base: string|null, remote: string}}
  */
 function parseArgs(argv) {
   const args = argv.slice(2);
-  return { base: getArg(args, '--base') };
+  return { base: getArg(args, '--base'), remote: getArg(args, '--remote') || 'origin' };
 }
 
 // ---------------------------------------------------------------------------
@@ -84,12 +87,15 @@ function run(spawnFn, cmdArgs, cwd) {
  *
  * @param {string} base  Base branch name (e.g. "main").
  * @param {{spawnFn?: Function, cwd?: string, remote?: string}} [opts]
- * @returns {{status: 'up_to_date'} | {status: 'clean', sha: string} | {status: 'conflicts', files: string[]}}
+ * @returns {{status: 'up_to_date'} | {status: 'clean', sha: string} | {status: 'conflicts', files: string[]} | {status: 'fetch_failed', remote: string, base: string, error: string}}
  */
 function resolveRebaseOntoBase(base, { spawnFn = spawnSync, cwd = process.cwd(), remote = 'origin' } = {}) {
   const baseRef = `${remote}/${base}`;
 
-  run(spawnFn, ['fetch', remote, base], cwd);
+  const fetchResult = run(spawnFn, ['fetch', remote, base], cwd);
+  if (fetchResult.status !== 0) {
+    return { status: 'fetch_failed', remote, base, error: fetchResult.stderr };
+  }
 
   const ancestorCheck = run(spawnFn, ['merge-base', '--is-ancestor', baseRef, 'HEAD'], cwd);
   if (ancestorCheck.status === 0) {
@@ -116,13 +122,13 @@ function resolveRebaseOntoBase(base, { spawnFn = spawnSync, cwd = process.cwd(),
 // ---------------------------------------------------------------------------
 
 function main(argv) {
-  const { base } = parseArgs(argv);
+  const { base, remote } = parseArgs(argv);
   if (!base) {
     process.stderr.write('Usage: rebase-onto-base.js --base <branch>\n');
     process.exit(1);
   }
 
-  const result = resolveRebaseOntoBase(base, { cwd: resolveSdlcRoot() });
+  const result = resolveRebaseOntoBase(base, { remote });
   writeJsonLine(result);
 }
 

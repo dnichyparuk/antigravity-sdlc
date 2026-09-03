@@ -8,6 +8,8 @@ model: gemini-3.7-flash-medium
 
 # Creating Pull Requests
 
+When to use: creating or updating a PR for the current branch; `/pr` delegates here.
+
 Consume pre-computed git context from `skill/pr.js` and generate an 8-section
 PR description readable by both technical and non-technical stakeholders.
 
@@ -90,13 +92,14 @@ If no tests added, explain why.]
 > **VERBATIM** — Execute this command directly with `node` and the absolute plugin path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict CLI location pattern: `<PLUGIN_ROOT>/scripts/<skill|util|lib>/<script-name>.js`). Do not modify, rephrase, or simplify the flags.
 
 ```shell
-node "<PLUGIN_ROOT>/scripts/skill/pr.js" $ARGUMENTS
+PR_CONTEXT_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/pr.js" $ARGUMENTS)
+EXIT_CODE=$?
 ```
 > **Contract (Input/Output):**
 > - **Input**: `$ARGUMENTS` (the skill's own arguments), forwarded verbatim.
-> - **Output**: Prints the path of a temp file holding the PR context JSON on stdout. Its exit code is `EXIT_CODE`.
+> - **Output**: Prints the path of a temp file holding the PR context JSON on stdout — capture it into `PR_CONTEXT_FILE`. Its exit code is `EXIT_CODE`.
 
-Capture the printed path as `PR_CONTEXT_FILE` and the command's exit status as `EXIT_CODE`. Read and parse `PR_CONTEXT_FILE` as `PR_CONTEXT_JSON`. The `trap` above guarantees cleanup on any exit path — do not add scattered `rm -f` calls in success/cancel branches.
+Read and parse `PR_CONTEXT_FILE` as `PR_CONTEXT_JSON`. Run `rm -f "$PR_CONTEXT_FILE"` on every terminal branch (success, cancel, error) — there is no trap to rely on for cleanup.
 
 **On non-zero `EXIT_CODE`:**
 
@@ -129,6 +132,8 @@ Read `PR_CONTEXT_JSON` now. Most fields are self-explanatory: `mode`, `baseBranc
 | `customTemplate` | Full content of `.sdlc/pr-template.md` (canonical) or `.sdlc/pr-template.md` (deprecated fallback, one-time stderr warning per process); `null` if neither file exists |
 | `prConfig` | PR title validation config from `.sdlc/config.json` (null when absent) |
 | `forcedLabels` | `string[]` — labels forced via `--label` flag(s), pre-validated against `repoLabels`. Always included in the PR regardless of signal matching |
+| `existingPr.labels` | `string[]` — labels currently applied to the existing PR (update mode only; `existingPr` is `null` in create mode) |
+| `diffStat.totalLinesChanged` | `number` — total lines added + removed across the diff |
 
 ### Step 2 (PLAN): Draft PR Description
 
@@ -139,8 +144,6 @@ Read `PR_CONTEXT_JSON` now. Most fields are self-explanatory: `mode`, `baseBranc
 Using data from `PR_CONTEXT_JSON`, draft all sections of the active PR template (custom sections if `customTemplate` is present, or the default 8 sections below).
 
 **OpenSpec enrichment (automatic when detected):**
-
-**Hook context fast-path:** If the session-start system-reminder contains an `OpenSpec active:` line, use its data (change name, branch match status, delta spec count) to skip the `Glob for openspec/config.yaml` and change directory scanning. If the line is absent or the user switched branches since session start, fall back to the existing Glob-based detection. The hook context is a session-start snapshot — treat it as a hint, not as authoritative.
 
 1. Glob for `openspec/config.yaml`. If absent, skip this block entirely.
 2. Identify the active change: Glob `openspec/changes/*/proposal.md` (exclude `archive/`). If one matches, use it. If multiple, match against `PR_CONTEXT_JSON.currentBranch`. If ambiguous, skip — do not ask during PR creation.
@@ -360,11 +363,7 @@ gh label create "<name>" --description "Auto-created by pr-sdlc" --color "c5def5
 
 This is idempotent — the command succeeds silently if the label already exists. This ensures forced labels work in any repository where the plugin is installed, not just repos where labels were pre-created.
 
-**Create mode:** issue the create through the `create-pr.js` wrapper described below — it is a transparent passthrough to `gh pr create` that only adds the post-failure recovery step:
-
-```bash
-gh pr create --title "<title>" --body "<body>" [--draft] [--label "<l1>" --label "<l2>"]
-```
+**Create mode:** issue the create through the `create-pr.js` wrapper described below — it is a transparent passthrough to `gh pr create` that only adds the post-failure recovery step. (What `create-pr.js` runs under the hood: `gh pr create --title "<title>" --body "<body>" [--draft] [--label "<l1>" --label "<l2>"]`.) The wrapper invocation below is the single publish path — do not run `gh pr create` directly first.
 
 If no labels were approved, omit the `--label` flags entirely.
 

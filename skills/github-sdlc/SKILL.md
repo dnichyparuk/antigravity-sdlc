@@ -61,7 +61,7 @@ Then use AskUserQuestion:
 > Execute this GitHub operation?
 > Options: **yes** — execute | **edit** — tell me what to change | **cancel** — abort
 
-If the user chooses `edit`, revise and present again. Loop until explicit `yes` or `cancel` — never execute a modifying command without this approval.
+If the user chooses `edit`, ask what to change, revise, and present again. Loop until explicit `yes` or `cancel` — never execute a modifying command without this approval, including operations like `close` and `reopen`.
 
 ## Step 3 — Execute
 

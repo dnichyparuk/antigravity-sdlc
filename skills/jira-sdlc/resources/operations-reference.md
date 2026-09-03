@@ -71,8 +71,7 @@ conditionally after Step 2 classifies the operation type.
    - On `cancel`: abort — do not dispatch
 
 7. Dispatch — call mcp__atlassian__createJiraIssue with contentFormat: "markdown"
-   - The PreToolUse hook re-derives the hash from tool_input and verifies the
-     two artifacts; on hook block, surface permissionDecisionReason verbatim
+   - Before dispatch, re-derive the hash from the final `tool_input` and confirm both artifacts exist for it — there is no PreToolUse hook; this check is yours
    - On 400 error: check fieldSchemas for the issue type; verify field shapes from
      REFERENCE.md Section 2
 
@@ -106,7 +105,7 @@ conditionally after Step 2 classifies the operation type.
    writeApprovalToken(hash)
 
 7. Dispatch — call mcp__atlassian__editJiraIssue with responseContentFormat: "markdown"
-   - On hook block: surface permissionDecisionReason verbatim
+   - On artifact mismatch: stop, show which artifact is missing/stale, return to step 5
    - On 400: check field key spelling (customfield_XXXXX), field type, and value shape
 
 8. Post-op cache update — record any newly resolved user mappings
@@ -155,7 +154,7 @@ conditionally after Step 2 classifies the operation type.
    writeApprovalToken(hash)
 
 7. Dispatch — call mcp__atlassian__transitionJiraIssue
-   - On hook block: surface permissionDecisionReason verbatim
+   - On artifact mismatch: stop, show which artifact is missing/stale, return to step 5
    - On 400 with requiredFields: verify all required fields were included with correct shapes
    - On "transition not found": getTransitionsForJiraIssue for fresh list (auto-refresh path)
 
@@ -187,7 +186,7 @@ conditionally after Step 2 classifies the operation type.
    writeApprovalToken(hash)
 
 7. Dispatch — call mcp__atlassian__addCommentToJiraIssue
-   - On hook block: surface permissionDecisionReason verbatim
+   - On artifact mismatch: stop, show which artifact is missing/stale, return to step 5
 
 8. Post-op cache update — none typically required for comments
 ```
@@ -214,7 +213,7 @@ conditionally after Step 2 classifies the operation type.
    writeApprovalToken(hash)
 
 7. Dispatch — call mcp__atlassian__createIssueLink
-   - On hook block: surface permissionDecisionReason verbatim
+   - On artifact mismatch: stop, show which artifact is missing/stale, return to step 5
 
 8. Post-op cache update — none typically required for links
 ```
@@ -229,7 +228,7 @@ conditionally after Step 2 classifies the operation type.
    - Call mcp__atlassian__lookupJiraAccountId({ cloudId, query: "<name or email>" })
    - If multiple results: show all and ask user to confirm which one
    - Once confirmed: save to cache via:
-     echo '{"<displayName>":"<accountId>"}' | node "<PLUGIN_ROOT>/scripts/skill/jira.js" --project "$KEY" --save-field userMappings
+     SAVE_RESULT=$(echo '{"<displayName>":"<accountId>"}' | node "<PLUGIN_ROOT>/scripts/skill/jira.js" --project "$KEY" --save-field userMappings)
 
 3. Call mcp__atlassian__editJiraIssue({
      cloudId, issueKey,
@@ -258,7 +257,7 @@ conditionally after Step 2 classifies the operation type.
    writeApprovalToken(hash)
 
 7. Dispatch — call mcp__atlassian__addWorklogToJiraIssue
-   - On hook block: surface permissionDecisionReason verbatim
+   - On artifact mismatch: stop, show which artifact is missing/stale, return to step 5
 
 8. Post-op cache update — none typically required for worklogs
 ```

@@ -272,6 +272,7 @@ function buildLanes(g17Dispatch, guardrails, projectRoot) {
   ];
 
   const lanes = laneDefs.map(def => ({
+    id: def.name,
     name: def.name,
     subagentType: 'general-purpose',
     model: def.model,
@@ -279,9 +280,14 @@ function buildLanes(g17Dispatch, guardrails, projectRoot) {
     gateIds: def.gateIds,
   }));
 
-  // Entry [4]: dimension-coverage — mirrors g17Dispatch verbatim (backwards compatibility)
-    if (hasDimensions) {
+  // dimension-coverage — mirrors g17Dispatch verbatim (backwards compatibility).
+  // Pushed last, but its position is NOT fixed: guardrail-compliance above is
+  // itself conditional on hasGuardrails, so this lane can land at index 3 or 4
+  // depending on which lanes were dropped. Select this lane by `id`, never by
+  // position (see the `lane.id` filter in main()).
+  if (hasDimensions) {
     lanes.push({
+      id: 'dimension-coverage',
       name: 'dimension-coverage',
       subagentType: g17Dispatch.subagentType,
       model: g17Dispatch.model,
@@ -565,8 +571,12 @@ function main() {
   // 6. P16/P17 — lane fan-out and lens reviewer signals (R35, R36 — Fixes #418)
   const lanes = buildLanes(g17Dispatch, guardrails, projectRoot);
   const lensReviewers = buildLensReviewers();
-  // Warn for any lane with null promptTemplatePath (non-G17 lanes only; G17 already warned above)
-  lanes.slice(0, 4).forEach(lane => {
+  // Warn for any lane with null promptTemplatePath (non-G17 lanes only; G17 already warned above).
+  // Selected by lane.id, not a positional slice — guardrail-compliance and
+  // dimension-coverage are both conditionally present, so their index shifts
+  // and a positional slice can pull the dimension-coverage (G17) lane into
+  // this loop and emit a duplicate warning.
+  lanes.filter(lane => lane.id !== 'dimension-coverage').forEach(lane => {
     if (lane.promptTemplatePath === null) {
       process.stderr.write(`[plan-prepare] lane "${lane.name}" skipped — prompt template not found\n`);
     }
@@ -603,4 +613,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { main, runExplorePack };
+module.exports = { main, runExplorePack, buildLanes };

@@ -16,10 +16,10 @@
  *   node worktree-lifecycle.js remove  --path <worktree-path>
  *
  * Output (stdout, single JSON line):
- *   resolve, match found:  {"found":true,"path":"...","mainWorktree":"...","branch":"..."}
+ *   resolve, match found:  {"found":true,"path":"...","mainWorktree":"...","branch":"...","exists":true,"matchedBy":"branch"|"cwd"}
  *   resolve, no match:     {"found":false,"mainWorktree":"..."}
  *   remove, success:       {"removed":true,"path":"..."}
- *   either, error:         {"error":"<message>"}  (plus any fields already resolved)
+ *   either, error:         {"error":"<message>","mainWorktree":null,...}  (mainWorktree is null when it could not be resolved; plus any other fields already resolved)
  *
  * Exit codes:
  *   0 = success
@@ -33,6 +33,7 @@
  */
 'use strict';
 
+const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
@@ -59,6 +60,19 @@ function defaultSpawn(cmd, args, opts) {
     stdout: result.stdout || '',
     stderr: result.stderr || '',
   };
+}
+
+/**
+ * Default `toplevelFn` — runs `git rev-parse --show-toplevel` in `cwd` and
+ * returns the trimmed path, or `null` when the command fails (e.g. `cwd` is
+ * not inside a git working tree). Overridable via `opts.toplevelFn`.
+ * @param {string} cwd
+ * @returns {string|null}
+ */
+function defaultToplevel(cwd) {
+  const result = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf8' });
+  if (result.status !== 0) return null;
+  return (result.stdout || '').trim() || null;
 }
 
 /**
@@ -97,23 +111,35 @@ function parseWorktreeList(output) {
  * `scripts/lib/worktree.js` rather than reimplementing main-worktree
  * detection.
  *
+ * When `branch` matches no entry, falls back to matching `cwd`'s toplevel
+ * (`git rev-parse --show-toplevel` run in `cwd`) against *linked* entry
+ * paths (the main worktree's own entry is excluded — being in the main
+ * worktree is not "finding" a linked worktree) — this covers resuming
+ * inside a linked worktree whose branch name isn't otherwise known to the
+ * caller. A cwd-matched result carries `matchedBy: 'cwd'` and the entry's
+ * own `branch`; a branch-matched result carries `matchedBy: 'branch'`.
+ *
  * @param {string} branch
  * @param {object} [opts]
  * @param {Function} [opts.spawnFn]  Injectable `(cmd, args, opts) => {status, stdout, stderr}`.
  * @param {string}   [opts.cwd]      Working directory for git commands (default `process.cwd()`).
  * @param {Function} [opts.resolveMainWorktreeFn]  Injectable replacement for `resolveMainWorktree`.
- * @returns {{found: boolean, path?: string, mainWorktree?: string, branch?: string, error?: string}}
+ * @param {Function} [opts.existsFn]  Injectable `(path) => boolean`, default `fs.existsSync`.
+ * @param {Function} [opts.toplevelFn]  Injectable `(cwd) => string|null`, default runs `git rev-parse --show-toplevel`.
+ * @returns {{found: boolean, path?: string, mainWorktree: string|null, branch?: string, exists?: boolean, matchedBy?: 'branch'|'cwd', error?: string}}
  */
 function resolveWorktree(branch, opts = {}) {
   const spawnFn = opts.spawnFn || defaultSpawn;
   const cwd = opts.cwd || process.cwd();
   const resolveMain = opts.resolveMainWorktreeFn || resolveMainWorktree;
+  const existsFn = opts.existsFn || fs.existsSync;
+  const toplevelFn = opts.toplevelFn || defaultToplevel;
 
   let mainWorktree;
   try {
     mainWorktree = resolveMain(cwd);
   } catch (err) {
-    return { found: false, error: `Could not resolve main worktree: ${err.message}` };
+    return { found: false, mainWorktree: null, error: `Could not resolve main worktree: ${err.message}` };
   }
 
   const result = spawnFn('git', ['worktree', 'list', '--porcelain'], { cwd: mainWorktree });
@@ -124,11 +150,19 @@ function resolveWorktree(branch, opts = {}) {
   const entries = parseWorktreeList(result.stdout);
   const match = entries.find((e) => e.branch === branch);
 
-  if (!match) {
-    return { found: false, mainWorktree };
+  if (match) {
+    return { found: true, path: match.path, mainWorktree, branch, exists: existsFn(match.path), matchedBy: 'branch' };
   }
 
-  return { found: true, path: match.path, mainWorktree, branch };
+  const toplevel = toplevelFn(cwd);
+  if (toplevel && path.resolve(toplevel) !== path.resolve(mainWorktree)) {
+    const cwdMatch = entries.find((e) => path.resolve(e.path) === path.resolve(toplevel));
+    if (cwdMatch) {
+      return { found: true, path: cwdMatch.path, mainWorktree, branch: cwdMatch.branch, exists: true, matchedBy: 'cwd' };
+    }
+  }
+
+  return { found: false, mainWorktree };
 }
 
 /**

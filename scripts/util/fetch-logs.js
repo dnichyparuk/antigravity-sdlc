@@ -25,8 +25,9 @@
  *
  * Exit codes:
  *   0 = success (including the soft-fail "no logs found" cases above)
- *   1 = user-facing validation error (missing/non-numeric --pr-number, or
- *       an unrecognized flag)
+ *   1 = user-facing validation error (missing/non-numeric --pr-number, an
+ *       unrecognized flag) or gh not authenticated / PR lookup failed — do
+ *       not treat as passing
  *   2 = unexpected crash
  *
  * Uses only Node.js built-in modules plus the shared `lib/git.js` helpers
@@ -126,7 +127,7 @@ function fetchLogs(argv, { fetchPrChecksFn = fetchPrChecks, fetchFailedCheckLogs
 
   const { checks, ghAuthenticated, errorMessage } = fetchPrChecksFn(opts.prNumber);
   if (!ghAuthenticated) {
-    return { stdout: '', stderr: `${errorMessage}\n`, exitCode: 0 };
+    return { stdout: '', stderr: `${errorMessage}\n`, exitCode: 1 };
   }
   const failed = checks.find((c) => c && c.bucket === 'fail');
   if (!failed || !failed.link) {

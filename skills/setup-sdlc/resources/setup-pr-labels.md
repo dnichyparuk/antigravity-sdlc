@@ -129,6 +129,7 @@ Iterate:
    - **commitType** — match if any commit subject begins with `<type>:` or `<type>(scope):`
    - **pathGlob** — match if every changed file matches one of these globs (e.g. `**/*.md`)
    - **jiraType** — match if `jiraTicket.type` is in the list (e.g. `Bug`, `Story`)
+     (accepted but not yet evaluated by pr.js — see warning at runtime)
    - **diffSizeUnder** — match if total lines changed is below this threshold
 
 4. **Enter the value(s).** Use AskUserQuestion (free text):
@@ -161,10 +162,10 @@ and loads `scripts/lib/config.js` itself — there is no separate config-helper
 lookup step:
 
 ```shell
-node "<PLUGIN_ROOT>/scripts/util/setup-pr-labels-write.js" --section pr --value '<BLOCK_AS_JSON>'
+WRITE_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/util/setup-pr-labels-write.js" --section pr --value '<BLOCK_AS_JSON>')
 ```
 
-Substitute `<BLOCK_AS_JSON>` with the JSON-stringified labels block.
+Substitute `<BLOCK_AS_JSON>` with the JSON-stringified labels block. The write CLI prints the path of a temp JSON manifest, not the JSON itself — read `$WRITE_OUTPUT_FILE` to confirm the write and surface any `errors`.
 
 ### Step 6 — Confirm
 

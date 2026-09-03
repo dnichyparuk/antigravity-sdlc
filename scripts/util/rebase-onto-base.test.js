@@ -23,19 +23,29 @@ test('parseArgs leaves base null when --base is absent', () => {
   assert.strictEqual(parsed.base, null);
 });
 
+test('parseArgs defaults remote to origin when --remote is absent', () => {
+  const parsed = parseArgs(['node', 'rebase-onto-base.js', '--base', 'main']);
+  assert.strictEqual(parsed.remote, 'origin');
+});
+
+test('parseArgs reads --remote', () => {
+  const parsed = parseArgs(['node', 'rebase-onto-base.js', '--base', 'main', '--remote', 'upstream']);
+  assert.strictEqual(parsed.remote, 'upstream');
+});
+
 // ---------------------------------------------------------------------------
 // resolveRebaseOntoBase — core logic with injectable spawnFn
 // ---------------------------------------------------------------------------
 
 function makeSpawnFn(handlers) {
-  return (cmd, args) => {
+  return (cmd, args, opts) => {
     assert.strictEqual(cmd, 'git');
     const key = args[0];
     const handler = handlers[key];
     if (!handler) {
       throw new Error(`unexpected git subcommand: ${args.join(' ')}`);
     }
-    return handler(args);
+    return handler(args, opts);
   };
 }
 
@@ -114,6 +124,57 @@ test('resolveRebaseOntoBase uses a custom remote when provided', () => {
 
   assert.deepStrictEqual(calls[0], ['fetch', 'upstream', 'main']);
   assert.deepStrictEqual(calls[1], ['merge-base', '--is-ancestor', 'upstream/main', 'HEAD']);
+});
+
+test('resolveRebaseOntoBase passes the injected cwd through to every spawn call', () => {
+  const injectedCwd = '/some/worktree';
+  const optsSeen = [];
+  const spawnFn = makeSpawnFn({
+    fetch: (args, opts) => { optsSeen.push(opts); return { status: 0, stdout: '', stderr: '' }; },
+    'merge-base': (args, opts) => { optsSeen.push(opts); return { status: 1, stdout: '', stderr: '' }; },
+    rebase: (args, opts) => { optsSeen.push(opts); return { status: 0, stdout: '', stderr: '' }; },
+    'rev-parse': (args, opts) => { optsSeen.push(opts); return { status: 0, stdout: 'deadbeef1234\n', stderr: '' }; },
+  });
+
+  resolveRebaseOntoBase('main', { spawnFn, cwd: injectedCwd });
+
+  assert.ok(optsSeen.length > 0);
+  for (const opts of optsSeen) {
+    assert.strictEqual(opts.cwd, injectedCwd);
+  }
+});
+
+test('resolveRebaseOntoBase returns fetch_failed with the trimmed stderr and makes no further spawns when fetch fails', () => {
+  const calls = [];
+  const spawnFn = makeSpawnFn({
+    fetch: (args) => { calls.push(args); return { status: 128, stdout: '', stderr: '  fatal: unable to access remote  \n' }; },
+  });
+
+  const result = resolveRebaseOntoBase('main', { spawnFn, cwd: '/repo' });
+
+  assert.deepStrictEqual(result, {
+    status: 'fetch_failed',
+    remote: 'origin',
+    base: 'main',
+    error: 'fatal: unable to access remote',
+  });
+  assert.strictEqual(calls.length, 1);
+  assert.deepStrictEqual(calls[0], ['fetch', 'origin', 'main']);
+});
+
+test('resolveRebaseOntoBase reports fetch_failed for a custom remote', () => {
+  const spawnFn = makeSpawnFn({
+    fetch: (args) => ({ status: 1, stdout: '', stderr: 'could not read from remote' }),
+  });
+
+  const result = resolveRebaseOntoBase('main', { spawnFn, cwd: '/repo', remote: 'upstream' });
+
+  assert.deepStrictEqual(result, {
+    status: 'fetch_failed',
+    remote: 'upstream',
+    base: 'main',
+    error: 'could not read from remote',
+  });
 });
 
 // ---------------------------------------------------------------------------

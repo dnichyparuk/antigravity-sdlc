@@ -285,9 +285,9 @@ Splitting only the missing IDs risks re-overflowing if the dependencies or share
 
 When a wave produces fundamentally broken output that cannot be recovered through targeted fixes:
 
-1. Stash all changes from the failed wave:
+1. Stash all changes from the failed wave, labeling the entry with the wave number so two failed waves produce distinguishable stash entries:
    ```bash
-   node "<PLUGIN_ROOT>/scripts/util/rollback-stash.js" stash
+   node "<PLUGIN_ROOT>/scripts/util/rollback-stash.js" stash --label "failed-wave-<N>"
    ```
 
 2. The script pushes a timestamped stash and then confirms it captured everything (`git status` + `git stash list`) before reporting. Branch on `status`:

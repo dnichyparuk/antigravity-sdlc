@@ -92,8 +92,8 @@ It ALWAYS exits 0 — `found: false` is a valid answer, not an error. Parse the 
 |---|---|
 | `stateFile` / `fullPath` | Repo-relative and absolute path of the selected state file (both `null` when none matched) |
 | `found` | Whether any state file matched this branch |
-| `fresh` | Whether the selected file is recent enough to be a post-compact recovery candidate |
-| `nextPendingStep` | Name of the first non-completed step, or `null` |
+| `fresh` | Whether the selected file's mtime is recent enough to be a post-compact recovery candidate |
+| `nextPendingStep` | Name of the first non-completed entry in the state file's `steps[]` array, or `null`. This is a `scripts/lib/state.js` field shared with ship-sdlc's state format; execute-only state files carry no top-level `steps[]`, so this is always `null` here and is not part of the resume decision below |
 | `waveShaStatus` | `[{wave, committedSha, reachable}]` — one entry per wave in the state file. `reachable` is `true` when `committedSha` is an ancestor of HEAD, `false` when it is not, and `null` when there is no sha to check |
 
 - If `--resume` was passed:
@@ -203,6 +203,7 @@ The script owns the whole sequence: it fetches the base from `origin` (the remot
 - `{"status":"up_to_date"}` — the branch already contains the base tip. Nothing to do.
 - `{"status":"clean","sha":"<new-head-sha>"}` — rebased successfully; `sha` is the new HEAD.
 - `{"status":"conflicts","files":["path/a.js", ...]}` — the rebase did not apply and has already been aborted for you. Warn (listing `files`) and continue execution on the current base — the plan may still succeed.
+- `{"status":"fetch_failed","remote":"origin","base":"<defaultBranch>","error":"<stderr>"}` — the fetch itself failed (network, auth, unknown remote). Print "Could not fetch `<remote>/<base>`: `<error>` — skipping rebase; branch may be behind base" and continue (non-fatal, same posture as `conflicts`).
 
 If `--rebase prompt`: Use AskUserQuestion — rebase onto default branch or skip. On "rebase", run the same command and branch on `status` identically.
 
@@ -362,8 +363,8 @@ Options:
 **5b. Dispatch wave-runner Agent** — One wave-runner Agent per wave. Build the wave-runner Agent's prompt from:
 
 1. Read `./resources/wave-runner-template.md` for the algorithm, contract, and constraints.
-2. Inline the full content of the per-task template from `./resources/classifying-and-waving-tasks.md` (lines 109–187) as the `perTaskTemplate` input.
-3. When the wave contains 2+ Trivial tasks, also inline the batched-trivial template from `./resources/classifying-and-waving-tasks.md` (lines 189–257) as the `batchedTrivialTemplate` input.
+2. Inline the full content of the per-task template from `./resources/classifying-and-waving-tasks.md` (the "Agent Prompt Template" section) as the `perTaskTemplate` input.
+3. When the wave contains 2+ Trivial tasks, also inline the batched-trivial template from `./resources/classifying-and-waving-tasks.md` (the "Batched Trivial Tasks Prompt Template" section) as the `batchedTrivialTemplate` input.
 4. Provide the complete wave manifest: `waveNumber`, `totalWaves`, `qualityTier`, `escalationBudget: 2`, and the per-task array with `id`, `complexity`, `risk`, `factSheetPath`, `assignedModel`, and `verifyToken` for each task.
 
    **Fact-sheet dispatch:** Before dispatching the wave-runner, write per-task fact sheets via:
@@ -852,11 +853,11 @@ If `openspecSpecs` was loaded in Step 1 (the plan was OpenSpec-sourced), also su
 1. Extract the change name from the plan header's `**Source:**` field (the `openspec/changes/<name>/` path).
 2. Call `lib/openspec.js::validateChangeStrict(projectRoot, name)` via Bash:
    ```shell
-   node "<PLUGIN_ROOT>/scripts/util/openspec-validate.js" '<name>'
+   OPENSPEC_VALIDATE_FILE=$(node "<PLUGIN_ROOT>/scripts/util/openspec-validate.js" '<name>')
    ```
    > **Contract (Input/Output):**
    > - **Input**: the change name as a single positional argument.
-   > - **Output**: prints the path of a temp JSON file on stdout — **not** the JSON itself. Read that path, `JSON.parse` the file, and take `{ ok, stdout, stderr, cliAvailable, errors }` from it. Exit 0 when `ok` is true, 1 when validation failed, 2 on an unexpected crash.
+   > - **Output**: prints the path of a temp JSON file on stdout — **not** the JSON itself. Capture that path into `OPENSPEC_VALIDATE_FILE`, `JSON.parse` the file, and take `{ ok, stdout, stderr, cliAvailable, errors }` from it. Exit 0 when `ok` is true, 1 when validation failed, 2 on an unexpected crash.
 3. **If `cliAvailable === false`:** emit the existing static advisory (no fabricated validation claim):
    - `/opsx:verify` — validate implementation completeness against the spec
    - `/opsx:archive` — merge delta specs into main specs after verification passes

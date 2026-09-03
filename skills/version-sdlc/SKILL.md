@@ -244,7 +244,7 @@ Read the JSON output. If any files have `action: "outdated"` or `action: "missin
    - Show what changed and which files would be updated (use `installedVersion` / `currentVersion` from the output)
    - Use AskUserQuestion to ask: "Update CI scripts? (yes / no) — this does not block the release."
    - **Auto mode:** When `flags.auto` is true, skip the AskUserQuestion and treat the response as `yes` — update outdated CI scripts automatically.
-   - On `yes`: run `node "<PLUGIN_ROOT>/scripts/util/scaffold-ci.js" --force` (add `--changelog` if applicable) to overwrite the outdated files
+   - On `yes`: run `SCAFFOLD_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/util/scaffold-ci.js" --force)` (add `--changelog` if applicable) to overwrite the outdated files — `scaffold-ci.js` prints a manifest path, so capture it rather than calling `node …` bare
    - On `no`: warn and continue with the release
 
 The release proceeds regardless of the user's answer. This is informational, not a gate.
@@ -283,13 +283,14 @@ LINK_EXIT=$?
 
    > **Contract (Input/Output):**
    > - **Input**: `--tag <newTag>` (required). Add `--hotfix` when `flags.hotfix === true`; `--version-file <versionFile>` only when `config.mode === "file"`; `--changelog-file CHANGELOG.md` only when `flags.changelog === true`; `--no-push` when `flags.noPush === true`; `--set-upstream <currentBranch>` when `remoteState.hasUpstream === false` — take `currentBranch` from the `version-context` output, never hardcode it. This auto-heals the first push from a fresh feature branch; no manual `git push -u` is required. At least one of `--version-file` / `--changelog-file` is required — with neither there is nothing to stage.
-   > - **Output**: one JSON line — `{"status":"ok","tag":"<newTag>"}` on success (plus `"pushed":false` under `--no-push`), or `{"status":"failed","failedStep":"...","reason":"..."}`, with an additive `rolledBackTag` when a post-tag push failure deleted the just-created tag, and additive `restoredVersionFile` / `diff` when the version-file gate rejected the release.
+   > - **Output**: one JSON line — `{"status":"ok","tag":"<newTag>"}` on success (plus `"pushed":false` under `--no-push`), or `{"status":"failed","failedStep":"...","reason":"..."}`, with an additive `rolledBackTag` on a push failure and an additive `recovery` when the tag push failed after the release commit already reached the remote, and additive `restoredVersionFile` / `diff` when the version-file gate rejected the release.
 
    Branch on the result:
    - `{"status":"ok", ...}` — the commit, the tag, and (unless `--no-push`) both pushes landed. Continue to the result display.
    - `{"status":"failed","failedStep":"diff-gate", ...}` — more than the version line changed in `<versionFile>`, or the version edit never landed. The release is aborted; `restoredVersionFile` reports whether the file was restored. Surface `reason` and `diff` verbatim and stop.
    - `{"status":"failed","failedStep":"add"|"commit"|"tag", ...}` — nothing was pushed and no tag survives. Show `reason` and stop.
-   - `{"status":"failed","failedStep":"push"|"push-tags","rolledBackTag":true, ...}` — the push failed after the tag was created, so the local tag was deleted to keep the repo consistent. Show `reason`, resolve the push cause (auth, branch protection, non-fast-forward), and re-run the release.
+   - `{"status":"failed","failedStep":"push","rolledBackTag":true, ...}` — the release commit push failed before the tag reached the remote, so nothing landed and the local tag was deleted to keep the repo consistent. Show `reason`, resolve the push cause (auth, branch protection, non-fast-forward), and re-run the release.
+   - `{"status":"failed","failedStep":"push-tags","rolledBackTag":false,"recovery":"...", ...}` — the release commit is already on the remote and only the tag push failed; the local tag is **kept** (it is the only recovery handle — the version-file gate makes a re-run impossible now that the bump has landed). Show `reason`, then run the `recovery` command verbatim (`git push <remote> <tag>`) to finish the release. Do **not** re-run the release.
 
 **On script crash (exit 2):** Invoke error-report-sdlc — Glob `**/error-report-sdlc/REFERENCE.md`, follow with skill=version-sdlc, step=Step 8 — Release execution, error=stderr plus the `failedStep`/`reason` from the JSON line.
 
@@ -316,6 +317,8 @@ If `flags.hotfix === true`, show instead:
 ### Branch C: Changelog-Update Workflow (`flow === "changelog-update"`)
 
 > When `VERSION_CONTEXT_JSON.flow === 'changelog-update'` (set by the script when `--changelog` is passed without a bump type), read `./resources/changelog-workflow.md` now for the complete changelog-update workflow steps.
+
+See `resources/changelog-workflow.md` → Accuracy and limitations before trusting the draft.
 
 ---
 
@@ -365,7 +368,8 @@ If `flags.hotfix === true`, show instead:
 | Tag already exists (`conflictsWithNext` true) | Suggest next patch/minor/major; let user choose | No — user decision |
 | `release` returns `failedStep: "commit"` | Show `reason`; check for uncommitted changes or hook failure | Yes if non-hook failure |
 | `release` returns `failedStep: "tag"` | Show `reason`; check for duplicate tag or missing git identity | Yes if non-duplicate failure |
-| `release` returns `failedStep: "push"` / `"push-tags"` | Show `reason`; check remote connectivity and branch protection rules; the tag was rolled back when `rolledBackTag` is true | Yes if non-auth failure |
+| `release` returns `failedStep: "push"` | Show `reason`; check remote connectivity and branch protection rules; the tag was rolled back (`rolledBackTag: true`); re-run the release once resolved | Yes if non-auth failure |
+| `release` returns `failedStep: "push-tags"` | Show `reason`; the release commit is already on the remote and the local tag is kept (`rolledBackTag: false`) — run the `recovery` command verbatim; do NOT re-run the release | Yes if non-auth failure |
 | `retag` returns `status: "failed"` | Show `failedStep` and `reason`; when `recovered` is false the local tag must be recreated manually | Yes if non-auth failure |
 
 When invoking `error-report-sdlc`, provide:

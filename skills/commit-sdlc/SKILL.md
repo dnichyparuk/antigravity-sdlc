@@ -31,13 +31,14 @@ If the system context contains "Plan mode is active":
 > **VERBATIM** — Execute this command directly with `node` and the absolute plugin path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict CLI location pattern: `<PLUGIN_ROOT>/scripts/<skill|util|lib>/<script-name>.js`). Do not modify, rephrase, or simplify the flags.
 
 ```shell
-node "<PLUGIN_ROOT>/scripts/skill/commit.js" $ARGUMENTS
+COMMIT_CONTEXT_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/commit.js" $ARGUMENTS)
+EXIT_CODE=$?
 ```
 > **Contract (Input/Output):**
 > - **Input**: `$ARGUMENTS` (the skill's own arguments), forwarded verbatim.
-> - **Output**: Prints the path of a JSON manifest of staged diffs and commit history on stdout. Its exit code is `EXIT_CODE`.
+> - **Output**: Prints the path of a JSON manifest of staged diffs and commit history on stdout — capture it into `COMMIT_CONTEXT_FILE`. Its exit code is `EXIT_CODE`.
 
-Capture the printed path as `COMMIT_CONTEXT_FILE` and the command's exit status as `EXIT_CODE`. Read and parse `COMMIT_CONTEXT_FILE` as `COMMIT_CONTEXT_JSON`.
+Read and parse `COMMIT_CONTEXT_FILE` as `COMMIT_CONTEXT_JSON`.
 
 **On non-zero `EXIT_CODE`:**
 
@@ -104,7 +105,7 @@ The orchestrator reads the manifest, applies every `commitConfig` constraint (`s
 
 Capture the orchestrator's return value as `MESSAGE`. If `MESSAGE` is empty, the orchestrator detected an `errors[]` array in the manifest — surface those errors and stop.
 
-**OpenSpec scope hint (main context, optional):** If `flags.scope` is NOT set, Glob for `openspec/config.yaml`. If found, Glob `openspec/changes/*/proposal.md` (exclude `archive/`). If exactly one active change exists, or one matches the current branch name, append an `OpenSpec-Change: <change-directory-name>` trailer to `MESSAGE` (after a blank line; only if `MESSAGE` already has a body — do not add a body solely for the trailer). If recent commits don't use scopes, the trailer is still optional. The hook context fast-path applies: if the session-start system-reminder has an `OpenSpec active:` line, use it instead of Glob.
+**OpenSpec scope hint (main context, optional):** If `flags.scope` is NOT set, Glob for `openspec/config.yaml`. If found, Glob `openspec/changes/*/proposal.md` (exclude `archive/`). If exactly one active change exists, or one matches the current branch name, append an `OpenSpec-Change: <change-directory-name>` trailer to `MESSAGE` (after a blank line; only if `MESSAGE` already has a body — do not add a body solely for the trailer). If recent commits don't use scopes, the trailer is still optional.
 
 ### Step 3 (CRITIQUE) and Step 4 (IMPROVE)
 
@@ -166,11 +167,17 @@ node "<PLUGIN_ROOT>/scripts/util/commit-validate-links.js"
    Add `--amend` when `flags.amend` is true, and `--no-stash` when `flags.noStash` is true.
    > **Contract (Input/Output):**
    > - **Input**: `--message <msg>` (required), `--amend`, `--no-stash`.
-   > - **Output**: one JSON line `{"committed": bool, "hookFailed": bool, "popConflict": bool}`, with an additive `reason`/`detail` on a stash-push or commit failure, or `conflictFiles: string[]` when `popConflict` is true.
+   > - **Output**: one JSON line `{"committed": bool, "hookFailed": bool, "classification": "hook"|"identity"|"gpg"|"nothing-to-commit"|"protected-branch"|"ambiguous"|"other", "popConflict": bool}`, with an additive `reason`/`detail` on a stash-push or commit failure, or `conflictFiles: string[]` when `popConflict` is true.
 
    Branch on the result:
    - `{"committed": true, "hookFailed": false, "popConflict": false}` — success; any stash was restored cleanly.
-   - `{"committed": false, "hookFailed": true, ...}` — the pre-commit hook failed; the stash is deliberately left in place. Inform the user: "Pre-commit hook failed. Your unstaged changes are stashed (`git stash list` to see). Fix the hook issue, re-stage your changes, and re-run `/commit-sdlc`."
+   - `{"committed": false, "hookFailed": true, "classification": "hook"|"ambiguous", ...}` — the pre-commit hook failed (or hook presence could not be determined, treated the same way); the stash is deliberately left in place. Inform the user: "Pre-commit hook failed. Your unstaged changes are stashed (`git stash list` to see). Fix the hook issue, re-stage your changes, and re-run `/commit-sdlc`."
+   - `{"committed": false, "hookFailed": false, "classification": "identity"|"gpg"|"nothing-to-commit"|"protected-branch"|"other", "reason": "...", "detail": "..."}` — the commit itself failed (not a hook). Show `reason` and `detail`; the stash is deliberately left in place — keep the same stash-recovery note as above (`git stash list`, fix the issue, re-stage, re-run `/commit-sdlc`). Then:
+     - `classification` is `identity`, `nothing-to-commit`, or `protected-branch` — user-actionable; show a one-line hint instead of invoking error-report-sdlc:
+       - `identity`: "Configure your git identity: `git config user.name` / `git config user.email`."
+       - `nothing-to-commit`: "Nothing to commit — stage changes with `git add` and retry."
+       - `protected-branch`: "The remote rejected this as a protected branch — target a feature branch or open a PR instead."
+     - `classification` is `other` or `gpg` — invoke error-report-sdlc (see Error Recovery below).
    - `{"committed": true, "hookFailed": false, "popConflict": true, "conflictFiles": [...]}` — the commit landed but the stash-pop conflicted; warn the user with `conflictFiles` and suggest `git stash show -p` and manual resolution.
    - `{"committed": false, "hookFailed": false, "popConflict": false, "reason": "git stash push failed", "detail": "..."}` — the stash push itself failed before any commit was attempted; show `detail` and stop.
 
@@ -210,7 +217,7 @@ The orchestrator's self-critique (Step 4 of `agents/commit-orchestrator.md`) enf
 
 > **Flow**: detect → diagnose → auto-recover (retry once if transient) → invoke `error-report-sdlc` for persistent failures.
 
-`commit.js` crashes (exit 2) and non-hook `git commit`/`git stash push` failures invoke error-report-sdlc; user-facing errors (`errors[]`, no staged changes, hook failure, stash-pop conflict — see Step 0/Step 5 above) do not. When invoking, provide: **Skill**: commit-sdlc, **Step**: Step 0 or Step 5, **Operation**: the failing command, **Error**: exit code + stderr, **Suggested investigation**: git identity, branch protection rules, hook scripts.
+`commit.js` crashes (exit 2) and `git stash push` failures invoke error-report-sdlc. For a commit failure, only `classification ∈ {other, gpg}` invokes error-report-sdlc — `identity`, `nothing-to-commit`, and `protected-branch` are user-actionable and get the one-line hint in Step 5 instead; `hook`/`ambiguous` are the existing hook-failure message, not an error report. User-facing errors (`errors[]`, no staged changes, hook failure, stash-pop conflict — see Step 0/Step 5 above) do not invoke error-report-sdlc. When invoking, provide: **Skill**: commit-sdlc, **Step**: Step 0 or Step 5, **Operation**: the failing command, **Error**: exit code + stderr, **Suggested investigation**: git identity, branch protection rules, hook scripts.
 
 ---
 

@@ -2,7 +2,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { parseArgs, detectIssueTicket, detectPrMode, matchRule, evaluateRule } = require('./pr.js');
+const { parseArgs, detectIssueTicket, detectPrMode, matchRule, evaluateRule, validateLabelRules } = require('./pr.js');
 
 test('parseArgs: defaults when no flags passed', () => {
   const result = parseArgs(['node', 'pr.js']);
@@ -146,4 +146,23 @@ test('evaluateRule: returns an empty array when no rule matches', () => {
     { label: 'small-change', when: { diffSizeUnder: 1 } },
   ];
   assert.deepStrictEqual(evaluateRule(validRules, baseContext), []);
+});
+
+test('validateLabelRules: a rule using jiraType produces a dead-rule warning', () => {
+  const rules = [{ label: 'story', when: { jiraType: ['Story'] } }];
+  const knownSignals = ['branchPrefix', 'commitType', 'pathGlob', 'jiraType', 'diffSizeUnder'];
+  const { validRules, warnings } = validateLabelRules(rules, ['story'], knownSignals);
+  assert.strictEqual(validRules.length, 1);
+  assert.ok(
+    warnings.some(w => w === "label rule 'story' uses `jiraType`, which pr.js does not evaluate (no Jira lookup) — rule will never match"),
+    `expected a jiraType dead-rule warning, got: ${JSON.stringify(warnings)}`
+  );
+});
+
+test('validateLabelRules: a rule not using jiraType produces no dead-rule warning', () => {
+  const rules = [{ label: 'feature', when: { branchPrefix: ['feat/'] } }];
+  const knownSignals = ['branchPrefix', 'commitType', 'pathGlob', 'jiraType', 'diffSizeUnder'];
+  const { validRules, warnings } = validateLabelRules(rules, ['feature'], knownSignals);
+  assert.strictEqual(validRules.length, 1);
+  assert.strictEqual(warnings.length, 0);
 });

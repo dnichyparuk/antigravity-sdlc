@@ -9,6 +9,7 @@ const path = require('node:path');
 const {
   clusterFindings,
   filterSingletonDisagrees,
+  countSkippedNullHints,
   capAndSortClusters,
   scanRerunKeys,
   applyRerunGuard,
@@ -225,6 +226,47 @@ test('formatDeferredLogEntry: includes PR, cluster lines, and suppressed count',
   assert.match(entry, /PR: 42/);
   assert.match(entry, /surface=plan-guardrails targetFile=\/repo\/plan\.js findings=2 verdict-mix=disagree:2/);
   assert.match(entry, /Suppressed: 3 additional clusters beyond cap=5/);
+});
+
+test('formatDeferredLogEntry: appends the KD7 re-run dedup audit line when suppressedByRerun > 0', () => {
+  const clusters = [
+    { surface: 'plan-guardrails', targetFile: '/repo/plan.js', findingCount: 2, verdictMix: 'disagree:2', preview100: 'preview' },
+  ];
+  const entry = formatDeferredLogEntry(42, clusters, 0, 5, 4);
+  assert.match(entry, /Suppressed: 4 clusters by re-run dedup \(KD7\)/);
+});
+
+test('formatDeferredLogEntry: omits the KD7 re-run dedup audit line when suppressedByRerun is 0', () => {
+  const clusters = [
+    { surface: 'plan-guardrails', targetFile: '/repo/plan.js', findingCount: 2, verdictMix: 'disagree:2', preview100: 'preview' },
+  ];
+  const entry = formatDeferredLogEntry(42, clusters, 0, 5, 0);
+  assert.ok(!/re-run dedup \(KD7\)/.test(entry), 'KD7 line must be absent when nothing was suppressed by the re-run guard');
+});
+
+// ---------------------------------------------------------------------------
+// countSkippedNullHints — null-hint findings are counted, not silently dropped
+// ---------------------------------------------------------------------------
+
+test('countSkippedNullHints: counts clusterable findings missing either harden hint', () => {
+  const findings = [
+    // Clusterable + both hints -> not skipped.
+    { threadId: 'a', verdict: 'disagree', hardenSurfaceHint: 'plan-guardrails', hardenTargetFileHint: '/repo/a.js' },
+    // Clusterable but missing target file hint -> skipped.
+    { threadId: 'b', verdict: 'disagree', hardenSurfaceHint: 'plan-guardrails', hardenTargetFileHint: null },
+    // Clusterable but missing surface hint -> skipped.
+    { threadId: 'c', verdict: 'disagree', hardenSurfaceHint: null, hardenTargetFileHint: '/repo/c.js' },
+    // Clusterable but missing both -> skipped.
+    { threadId: 'd', verdict: 'disagree', hardenSurfaceHint: null, hardenTargetFileHint: null },
+  ];
+  assert.strictEqual(countSkippedNullHints(findings), 3);
+});
+
+test('countSkippedNullHints: ignores findings whose verdict is not clusterable', () => {
+  const findings = [
+    { threadId: 'x', verdict: 'agree', hardenSurfaceHint: null, hardenTargetFileHint: null },
+  ];
+  assert.strictEqual(countSkippedNullHints(findings), 0);
 });
 
 // ---------------------------------------------------------------------------

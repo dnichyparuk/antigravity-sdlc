@@ -57,13 +57,16 @@ To prevent context bloat and token exhaustion:
 > **VERBATIM** — Run this command exactly as written, invoking the script with `node` and its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict script location pattern: `<PLUGIN_ROOT>/scripts/<group>/<script-name>.js`, where `<group>` is one of `skill`, `util`, `lib`, `state`, or `ci`). There is no shell wrapper — always call `node` on the `.js` file directly.
 
 ```shell
-node "<PLUGIN_ROOT>/scripts/skill/plan.js" --output-file
+PREPARE_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/plan.js" --output-file)
+EXIT_CODE=$?
+echo "PREPARE_OUTPUT_FILE: $PREPARE_OUTPUT_FILE"
+echo "EXIT_CODE: $EXIT_CODE"
 ```
 > **Contract (Input/Output):**
 > - **Input**: None.
-> - **Output**: Prints JSON manifest of current branch state.
+> - **Output**: Prints the path of a temp JSON manifest (via `writeOutput`) describing current branch state. `--output-file` makes stdout the manifest path; capture it into `PREPARE_OUTPUT_FILE`.
 
-If `--from-openspec <name>` was passed to plan-sdlc, append it to the same command: `node "<PLUGIN_ROOT>/scripts/skill/plan.js" --output-file --from-openspec <name>`.
+If `--from-openspec <name>` was passed to plan-sdlc, append it to the same command: `PREPARE_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/plan.js" --output-file --from-openspec <name>)`.
 
 If `EXIT_CODE` is non-zero, print the errors from the JSON output and stop. If `EXIT_CODE` is 0, read the JSON output file. Print context detection summary:
 ```
@@ -75,6 +78,8 @@ Context detection (from skill/plan.js):
 ```
 
 Extract `guardrails` from the output → store as `activeGuardrails`. If the array is non-empty, print: "Loaded N plan guardrails." If empty: "No plan guardrails configured."
+
+Once the manifest has been read, delete it: `rm -f "$PREPARE_OUTPUT_FILE"`.
 
 **Contradictory-signal override:** After reading the prepare output, IF `openspec.authoritative.path` is set AND the current session-start `<system-reminder>` contains a line matching `/openspec.*not initialized|not initialized.*openspec/i`, print exactly one line:
 `Ignoring contradictory 'not initialized' signal in session context — openspec/config.yaml exists (authoritative source: SDLC's own check via plan.js prepare output).`
@@ -114,6 +119,8 @@ Naming convention: `YYYY-MM-DD-<feature-name>.md`. Create the directory if neede
 **Plan mode:** Write to the designated plan file path. Skip path resolution.
 
 **planFile marker (intended to be consumed by a `hooks/stop-plan-integrity.js` Stop hook):** After path resolution, record the resolved plan path in the plan integrity state. Run in both plan-mode and normal-mode branches. Marker writes are best-effort — swallow any error (`2>/dev/null || true`) so a failed marker never blocks plan creation. **`hooks/stop-plan-integrity.js` does not exist in this repo and is not registered in `hooks.json`** — the marker file is currently written but never read back; no Stop hook verifies plan integrity today. See `resources/state-format.md` for the designed (not-yet-built) contract.
+
+Each `--mark` block below spells out the full `<PLUGIN_ROOT>` path — SKILL.md bash blocks run as separate Bash tool invocations, so shell variables do NOT persist between them. Marker failures are silent (`2>/dev/null || true`), so a hoisted variable would drop `guardrailsEvaluated`/`critiqueRan` without any error.
 
 ```shell
 node "<PLUGIN_ROOT>/scripts/skill/plan.js" --mark plan-file --path "<resolved-plan-path>" 2>/dev/null || true
@@ -411,6 +418,7 @@ Then call ExitPlanMode. Do NOT invoke execute-plan-sdlc or ship-sdlc in this tur
 - Put plans in `$TMPDIR` — plans should survive session boundaries
 - Put plans in plugin-branded directories (no `docs/superpowers/plans/`)
 - Ignore plan mode's designated file path when plan mode is active — always write to it
+- Skip the plan review loop (Step 5) unless lightweight routing applies
 
 ## Gotchas
 

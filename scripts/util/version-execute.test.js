@@ -58,6 +58,12 @@ test('parseArgs reads the retag subcommand and --tag', () => {
   assert.strictEqual(parsed.subcommand, 'retag');
   assert.strictEqual(parsed.tag, 'v1.2.3');
   assert.strictEqual(parsed.hotfix, false);
+  assert.strictEqual(parsed.expectedHead, null);
+});
+
+test('parseArgs reads --expected-head for retag', () => {
+  const parsed = parseArgs(['node', 'version-execute.js', 'retag', '--tag', 'v1.2.3', '--expected-head', 'head222']);
+  assert.strictEqual(parsed.expectedHead, 'head222');
 });
 
 test('parseArgs reads every release flag', () => {
@@ -78,6 +84,7 @@ test('parseArgs reads every release flag', () => {
     changelogFile: 'CHANGELOG.md',
     noPush: true,
     upstreamBranch: 'feat/x',
+    expectedHead: null,
   });
 });
 
@@ -246,6 +253,31 @@ test('runRetag honours a custom remote and tag message', () => {
   assert.ok(calls.includes('push upstream v1.2.3'));
 });
 
+test('runRetag reports ok without a HEAD re-derivation when the tag matches expectedHead', () => {
+  const { spawnFn, calls } = makeSpawn(OK_SHAS);
+
+  const result = runRetag('v1.2.3', { spawnFn, cwd: '/repo', expectedHead: 'head222' });
+
+  assert.deepStrictEqual(result, { status: 'ok', tag: 'v1.2.3' });
+  // Verification used the approved head, not a fresh `rev-parse HEAD`.
+  assert.ok(!calls.includes('rev-parse HEAD'));
+});
+
+test('runRetag fails verification when the tag lands on a different commit than the approved head', () => {
+  const { spawnFn } = makeSpawn(OK_SHAS);
+
+  const result = runRetag('v1.2.3', { spawnFn, cwd: '/repo', expectedHead: 'approvedhead999' });
+
+  assert.deepStrictEqual(result, {
+    status: 'failed',
+    failedStep: 'verify',
+    reason: 'tag points at head222, approved head was approvedhead999',
+  });
+  // Both SHAs must be present in the reason for the operator to diagnose the drift.
+  assert.match(result.reason, /head222/);
+  assert.match(result.reason, /approvedhead999/);
+});
+
 // ---------------------------------------------------------------------------
 // runRelease
 // ---------------------------------------------------------------------------
@@ -271,7 +303,7 @@ test('runRelease runs gate, add, commit, tag and the two-command push', () => {
     'commit -m chore(release): v1.1.0',
     'tag -a v1.1.0 -m Release v1.1.0',
     'push',
-    'push --tags',
+    'push origin v1.1.0',
   ]);
 });
 
@@ -386,18 +418,24 @@ test('runRelease rolls the tag back when the commit push fails after tagging', (
   assert.strictEqual(result.recovered, undefined);
 });
 
-test('runRelease rolls the tag back when the tag push fails', () => {
+test('runRelease keeps the local tag when the tag push fails and returns a recovery command', () => {
   const { spawnFn, calls } = makeSpawn({
     'diff -- package.json': { stdout: ONE_LINE_DIFF },
-    'push --tags': { status: 1, stderr: 'remote: tag protection rule' },
+    'push origin v1.1.0': { status: 1, stderr: 'remote: tag protection rule' },
   });
 
   const result = runRelease('v1.1.0', releaseOpts({ spawnFn }));
 
-  assert.strictEqual(result.status, 'failed');
-  assert.strictEqual(result.failedStep, 'push-tags');
-  assert.strictEqual(result.rolledBackTag, true);
-  assert.ok(calls.includes('tag -d v1.1.0'));
+  assert.deepStrictEqual(result, {
+    status: 'failed',
+    rolledBackTag: false,
+    failedStep: 'push-tags',
+    reason:
+      'remote: tag protection rule — release commit is already on origin; local tag v1.1.0 kept',
+    recovery: 'git push origin v1.1.0',
+  });
+  // The release commit already landed — the local tag must never be deleted.
+  assert.ok(!calls.some((c) => c.startsWith('tag -d')));
 });
 
 test('runRelease reports rolledBackTag false when the rollback delete fails', () => {
@@ -427,7 +465,7 @@ test('runRelease sets the upstream on the first push when a branch is given', ()
   runRelease('v1.1.0', releaseOpts({ spawnFn, upstreamBranch: 'feat/release' }));
 
   assert.ok(calls.includes('push --set-upstream origin feat/release'));
-  assert.ok(calls.includes('push --tags'));
+  assert.ok(calls.includes('push origin v1.1.0'));
 });
 
 // ---------------------------------------------------------------------------
