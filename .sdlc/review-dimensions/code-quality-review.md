@@ -9,7 +9,7 @@ skip-when:
   - "**/*.test.*"
   - "**/node_modules/**"
 severity: medium
-model: haiku
+model: gemini-3.7-flash-medium
 ---
 
 # Code Quality Review

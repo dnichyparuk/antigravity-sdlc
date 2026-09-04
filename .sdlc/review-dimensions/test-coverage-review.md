@@ -10,7 +10,7 @@ skip-when:
   - "**/*.test.*"
   - "scripts/ci/**"
 severity: medium
-model: haiku
+model: gemini-3.7-flash-medium
 ---
 
 # Test Coverage Review

@@ -5,12 +5,12 @@ triggers:
   - "package.json"
   - "package-lock.json"
 severity: medium
-model: haiku
+model: gemini-3.7-flash-medium
 ---
 
 # Dependency Management Review
 
-Review dependency changes for consistency and necessity. This repo is a Claude Code plugin
+Review dependency changes for consistency and necessity. This repo is an Antigravity plugin
 distributed to other users' machines, not an app with a controlled deploy environment — it
 deliberately bootstrapped its test infrastructure on `node:test` (built into Node.js) to add
 **zero** new runtime/dev dependencies. New dependencies should be treated as a real cost, not

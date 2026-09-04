@@ -7,7 +7,7 @@ triggers:
   - "skills/*/resources/*.md"
   - "agents/*.md"
 severity: low
-model: haiku
+model: gemini-3.7-flash-medium
 ---
 
 # Documentation Review

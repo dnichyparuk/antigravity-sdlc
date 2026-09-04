@@ -56,7 +56,7 @@ function staticCap(totalRemainingTasks) {
  * @param {number}   opts.guardrailsBytes           - bytes for rendered guardrails block
  * @param {number[]} opts.perTaskFactSheetBytes      - array of fact-sheet sizes, one per candidate task
  * @param {number}   opts.priorWaveContextBytes      - bytes for prior-wave context summary
- * @param {string}   opts.model                     - "haiku" | "sonnet" | "opus"
+ * @param {string}   opts.model                     - "gemini-3.7-flash" | "gemini-3.1-pro"
  * @param {number}   [opts.modelMaxInputBytes]       - override model limit (for testing)
  * @param {number}   [opts.totalRemainingTasks]      - used for static-cap lookup (default: perTaskFactSheetBytes.length)
  *

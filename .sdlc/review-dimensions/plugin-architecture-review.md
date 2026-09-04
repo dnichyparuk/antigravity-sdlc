@@ -1,18 +1,18 @@
 ---
 name: plugin-architecture-review
-description: "Reviews changes to hooks.json, hooks/*.js interceptors, plugin.json, and SKILL.md contracts — this repo IS a Claude Code plugin, and hook bugs are safety-critical"
+description: "Reviews changes to hooks.json, hooks/*.js interceptors, plugin.json, and SKILL.md contracts — this repo IS an Antigravity plugin, and hook bugs are safety-critical"
 triggers:
   - "hooks.json"
   - "hooks/**/*.js"
   - "plugin.json"
   - "skills/*/SKILL.md"
 severity: medium
-model: sonnet
+model: gemini-3.1-pro-high
 ---
 
 # Plugin Architecture Review
 
-This repository is itself a Claude Code plugin (`plugin.json`), and `hooks.json` registers
+This repository is itself an Antigravity plugin (`plugin.json`), and `hooks.json` registers
 five `PreToolUse`/`PreInvocation` hook interceptors (`pre-tool-git-guard.js`,
 `pre-tool-file-guard.js`, `pre-tool-validate.js`, `session-start.js`, `stop-state-save.js`).
 Every user of this plugin runs these hooks on every matching tool call — a bug here is not a

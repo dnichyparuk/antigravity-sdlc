@@ -43,14 +43,14 @@ If you drive Lift-SDLC through the Antigravity CLI instead of the IDE, place the
 
 When executing tasks or using subagents from the Antigravity CLI, you may be frequently prompted to confirm file write operations (e.g., being asked to press `Ctrl+K`) for temporary scratch files. To bypass these prompts while still maintaining security for your main workspace, you can explicitly allow writes to the conversation-scoped `brain` directory where these scratch files reside.
 
-To do this, ensure your global `"toolPermission"` is set to `"request-review"` (the default) and add the `write_file` rule for the `brain` directory to your `permissions.allow` list:
+To do this, ensure your global `"toolPermission"` is set to `"request-review"` (the default) and add the `write_to_file` rule for the `brain` directory to your `permissions.allow` list:
 
 ```json
 {
   "toolPermission": "request-review",
   "permissions": {
     "allow": [
-      "write_file(/home/<your-username>/.gemini/antigravity-ide/brain)",
+      "write_to_file(/home/<your-username>/.gemini/antigravity-ide/brain)",
       "command(node .*/\\.gemini/config/plugins/sdlc/.*)",
       "command(.*/\\.gemini/config/plugins/sdlc/skills/.*/scripts/.*)"
     ]
