@@ -16,6 +16,7 @@ try {
     input = JSON.parse(raw);
   }
 } catch {
+  // Stdin unreadable or non-JSON — graceful degradation, allow the tool call
   process.stdout.write(JSON.stringify({ decision: 'allow' }) + '\n');
   process.exit(0);
 }

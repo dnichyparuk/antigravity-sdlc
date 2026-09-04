@@ -3,7 +3,7 @@ name: setup-sdlc
 description: "Use this skill when setting up Lift-SDLC for a project, initializing configuration, or when any skill reports missing config. Renders a selective-section menu so users choose which sections to configure; each selected section prints a verbose header (purpose, files-modified, consuming skills, per-option description) before any prompt. Supports direct sub-flow entry via --only, --dimensions, --pr-template, --guardrails, --execution-guardrails, --openspec-enrich. Arguments: [--migrate] [--skip <section>] [--force] [--only <ids>] [--dimensions] [--pr-template] [--guardrails] [--execution-guardrails] [--openspec-enrich] [--remove-openspec] [--add] [--no-copilot]"
 user-invocable: true
 argument-hint: "[--migrate] [--skip <section>] [--force] [--only <ids>] [--dimensions] [--pr-template] [--guardrails] [--execution-guardrails] [--openspec-enrich] [--remove-openspec] [--add] [--no-copilot]"
-model: gemini-3.5-flash-medium
+model: gemini-3.7-flash-medium
 ---
 
 # SDLC Setup
@@ -50,10 +50,10 @@ If the system context contains "Plan mode is active":
 
 Run `skill/setup.js` via Bash to get current state:
 
-> **VERBATIM** -- Run this bash block exactly as written. Do not modify, rephrase, or simplify the commands.
+> **VERBATIM** -- Run this bash block exactly as written, invoking the script with `node` and its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin; the strict script location pattern is `<PLUGIN_ROOT>/scripts/<group>/<script-name>.js`, where `<group>` is one of `skill`, `util`, `lib`, `state`, or `ci`). There is no shell wrapper — always call `node` on the `.js` file directly. Do not modify, rephrase, or simplify the commands.
 
 ```shell
-<PLUGIN_ROOT>/skills/setup-sdlc/scripts/prepare.sh
+node "<PLUGIN_ROOT>/scripts/skill/setup.js" $ARGUMENTS
 ```
 > **Contract (Input/Output):**
 > - **Input**: None.
@@ -176,7 +176,7 @@ Store the resolved section ids as `selectedIds`. Defer migration and field colle
 `needsMigration` is true when ANY of these conditions hold:
 - A legacy config file exists (`.sdlc/version.json`, `.sdlc/ship-config.json`, `.sdlc/jira-config.json`, `.sdlc/review.json`, `.sdlc/review.json`)
 - `.sdlc/config.json` contains misplaced sections (e.g. `ship` in the project config)
-- `.sdlc/local.json` is v1 schema — has legacy `ship.preset` or `ship.skip` keys, or lacks the top-level `version: 2` stamp (`localIsV1` from prepare output). Auto-migrated by `lib/config.js::readLocalConfig` on next read; `--migrate` triggers it explicitly with a banner.
+- `.sdlc/local.json` is v1 schema — has legacy `ship.preset` or `ship.skip` keys, or lacks the top-level `version: 2` stamp (`localIsV1` from prepare output). `readLocalConfig` never migrates on read (it is a pure read, no write) — the fix is re-running the `ship` section through Step 3 below, which fully replaces the section via `writeLocalConfig` and stamps the current schema version.
 - `legacy.jiraTemplates.exists` is true (`.sdlc/jira-templates/` detected — implements R-LEGACY-DETECT, #423)
 
 If legacy files exist or `projectConfig.misplaced` is non-empty, use AskUserQuestion:
@@ -191,25 +191,18 @@ Options:
 - **yes** -- migrate now (recommended)
 - **no** -- configure from scratch
 
-On **yes**: Run migration via inline Node.js that calls `migrateConfig()` from `lib/config.js`:
+On **yes**: there is no separate migration command to run, and no automatic migration happens on read — `lib/config.js::readLocalConfig` is a pure read with no write path, and `config-version.js::verifyAndMigrate` never migrates either (its own docstring: "No migrations are performed"; it always returns `migrated: false`). The actual fix is to go through the `ship` section in Step 3 below: `writeLocalConfig` does a top-level merge, so writing a fresh `ship` value there fully replaces the old `preset`/`skip` object and stamps the current `schemaVersion` in the same write. Re-run the Step 0 prepare command first to refresh state, then proceed to Step 3 and select the `ship` section:
 
 ```shell
-<PLUGIN_ROOT>/skills/setup-sdlc/scripts/migrate_config.sh
+node "<PLUGIN_ROOT>/scripts/skill/setup.js" $ARGUMENTS
 ```
 > **Contract (Input/Output):**
-> - **Input**: Legacy config context.
-> - **Output**: Migrates config to latest version.
+> - **Input**: None.
+> - **Output**: Prints JSON manifest of current SDLC configuration state, with `legacy` and `projectConfig.misplaced` refreshed.
 
-Then dispatch the jira-templates migration shim if `prepare.legacy.jiraTemplates.exists` is true (R-LEGACY-DETECT, #423):
+If `prepare.legacy.jiraTemplates.exists` is true (R-LEGACY-DETECT, #423), report the `.sdlc/jira-templates/` directory as a leftover the user may delete manually — nothing migrates it automatically.
 
-```shell
-<PLUGIN_ROOT>/skills/setup-sdlc/scripts/migrate_jira.sh
-```
-> **Contract (Input/Output):**
-> - **Input**: Legacy Jira context.
-> - **Output**: Migrates Jira caching configuration.
-
-Parse the output. Report what was migrated:
+Parse the refreshed output. Report what was migrated:
 - List each file from `migrated` array
 - List each file from `conflicts` array with explanation: "Conflict: unified config already has this section -- legacy file was NOT merged"
 
@@ -577,7 +570,7 @@ The historical step labels map onto the dispatcher above for anyone updating tes
 Before invoking `util/setup-init.js`, render an end-of-run diff preview comparing the in-memory snapshot of the project config as read at preflight (Step 0 prepare output) against the accumulated answers from Steps 3a–3f. Use `lib/config.js::computeConfigDiff(before, after)` — pure helper, no I/O:
 
 ```shell
-<PLUGIN_ROOT>/skills/setup-sdlc/scripts/diff_write_config.sh
+node "<PLUGIN_ROOT>/scripts/util/setup-diff-write-config.js" --before '<BEFORE_JSON>' --after '<AFTER_JSON>'
 ```
 > **Contract (Input/Output):**
 > - **Input**: Config changes.
@@ -601,13 +594,15 @@ Otherwise, ask the user to confirm the diff via AskUserQuestion (suppressed when
 After collecting all answers AND confirming the diff preview above, write project config and local config via `util/setup-init.js`:
 
 ```shell
-<PLUGIN_ROOT>/skills/setup-sdlc/scripts/init.sh
+node "<PLUGIN_ROOT>/scripts/util/setup-init.js" --output-file --project-config '<PROJECT_CONFIG_JSON>' --local-config '<LOCAL_CONFIG_JSON>'
 ```
 > **Contract (Input/Output):**
 > - **Input**: Configuration parameters.
 > - **Output**: Bootstraps the `.sdlc` directory structure.
 
-Parse the output JSON from `$INIT_OUTPUT_FILE`. The `trap` above guarantees cleanup on any exit path — do not add scattered `rm -f` calls.
+Replace `<PROJECT_CONFIG_JSON>` and `<LOCAL_CONFIG_JSON>` with the actual config objects assembled from Steps 3a–3f. Only include sections that were configured (not skipped).
+
+The command prints the manifest path on stdout; read that file and parse the JSON. Delete the manifest with `rm -f` once parsed — do not leave it behind.
 
 Display created files, check for errors. The `setup-init.js` script deterministically creates `.sdlc/` directory, `.sdlc/.gitignore`, writes config files via `writeProjectConfig` and `writeLocalConfig` (read-merge-write, so existing sections are preserved), and ensures a managed `.gitignore` block exists in the project root listing transient skill artifact patterns (`*-context-*.json`, `*-manifest-*.json`, `*-prepare-*.json`). The managed block is delimited by sentinel comments (`# >>> lift-sdlc managed`/`# <<< lift-sdlc managed`) and is idempotent — re-running setup-sdlc replaces the block contents in place rather than duplicating. Existing user content in `.gitignore` is preserved (issue #209).
 
@@ -616,10 +611,10 @@ Display created files, check for errors. The `setup-init.js` script deterministi
 Re-run `skill/setup.js` to verify the config files were written correctly:
 
 ```bash
-node "$SCRIPT" > "$PREPARE_OUTPUT_FILE"
+VALIDATE_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/setup.js")
 ```
 
-Parse the output and confirm:
+`skill/setup.js` always writes its JSON payload to a temp file via `writeOutput()` and prints only the manifest path on stdout — read `$VALIDATE_OUTPUT_FILE` and parse its JSON (do not redirect stdout into a file; that would capture the path, not the payload). Confirm:
 - `projectConfig.exists` is `true` and `projectConfig.sections` includes the sections just written
 - `localConfig.exists` is `true` (if review scope was configured)
 

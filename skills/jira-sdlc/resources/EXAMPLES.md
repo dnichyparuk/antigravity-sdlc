@@ -126,9 +126,10 @@ mcp__atlassian__getTransitionsForJiraIssue({
 ### Phase 6 — Save cache
 
 ```bash
-# $SCRIPT is set by the Script Resolution Block in SKILL.md Step 0.
+# Replace <PLUGIN_ROOT> with the absolute path to this plugin, per the Script
+# Resolution Block in SKILL.md Step 0.
 # Write assembled cache JSON to disk via the prepare script (handles site-keyed path)
-cat << 'EOF' | node "$SCRIPT" --project PROJ --save
+cat << 'EOF' | node "<PLUGIN_ROOT>/scripts/skill/jira.js" --project PROJ --save
 {
   "cloudId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "siteUrl": "https://mycompany.atlassian.net",

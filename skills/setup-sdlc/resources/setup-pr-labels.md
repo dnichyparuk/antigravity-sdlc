@@ -155,17 +155,13 @@ Build the final block:
 - `llm` → `{ mode: 'llm' }`
 - `rules` → `{ mode: 'rules', rules: [...] }`
 
-Locate the config helper:
+Merge the labels block into the existing `pr` section without clobbering
+`titlePattern`, `allowedTypes`, or any other sibling key. The write CLI locates
+and loads `scripts/lib/config.js` itself — there is no separate config-helper
+lookup step:
 
 ```shell
-<PLUGIN_ROOT>/skills/setup-sdlc/scripts/setup-pr-labels_load_config.sh
-```
-
-Then merge the labels block into the existing `pr` section without clobbering
-`titlePattern`, `allowedTypes`, or any other sibling key:
-
-```shell
-<PLUGIN_ROOT>/skills/setup-sdlc/scripts/setup-pr-labels_write.sh '<BLOCK_AS_JSON>'
+node "<PLUGIN_ROOT>/scripts/util/setup-pr-labels-write.js" --section pr --value '<BLOCK_AS_JSON>'
 ```
 
 Substitute `<BLOCK_AS_JSON>` with the JSON-stringified labels block.

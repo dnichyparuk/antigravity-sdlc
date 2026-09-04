@@ -1,0 +1,17 @@
+{
+  "name": "lift-sdlc",
+  "version": "0.21.0",
+  "private": true,
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "test": "node --test 'scripts/**/*.test.js' 'skills/**/*.test.js'",
+    "lint": "eslint scripts skills"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.9.1",
+    "globals": "^17.12.0"
+  }
+}

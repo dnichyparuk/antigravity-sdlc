@@ -3,7 +3,7 @@ name: review-sdlc
 description: "Use this skill when reviewing code changes across project-defined dimensions (security, performance, docs, concurrency, etc.). Runs skill/review.js to pre-compute all git data, then delegates to the review-orchestrator agent. Arguments: [--base <branch>] [--committed] [--staged] [--working] [--worktree] [--set-default] [--dimensions <name,...>] [--dry-run]. Triggers on: review changes, code review, review PR, multi-dimension review, run review."
 user-invocable: true
 argument-hint: "[--base <branch>] [--committed] [--staged] [--dimensions <name,...>]"
-model: gemini-3.5-flash-medium
+model: gemini-3.7-flash-medium
 ---
 
 # Reviewing Changes
@@ -17,11 +17,16 @@ Thin dispatcher — runs the prepare script, then delegates everything to the
 
 ## Step 0 — Resolve and Run skill/review.js
 
-> **VERBATIM** — Execute this script directly using its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict script location pattern: `<PLUGIN_ROOT>/skills/<skill-name>/scripts/<script-name>.sh`). Do NOT prepend `bash` or `sh`. Do not modify, rephrase, or simplify the commands.
+> **VERBATIM** — Run this command exactly as written, invoking the script with `node` and its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict script location pattern: `<PLUGIN_ROOT>/scripts/<group>/<script-name>.js`, where `<group>` is one of `skill`, `util`, `lib`, `state`, or `ci`). There is no shell wrapper — always call `node` on the `.js` file directly. Do not modify, rephrase, or simplify the commands.
 
 ```shell
-<PLUGIN_ROOT>/skills/review-sdlc/scripts/prepare.sh
+MANIFEST_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/review.js" $ARGUMENTS --json)
+EXIT_CODE=$?
 ```
+
+> **Contract (Input/Output):**
+> - **Input**: ship-sdlc/user `$ARGUMENTS`, forwarded verbatim before the fixed `--json` flag.
+> - **Output**: `skill/review.js` always writes its JSON payload to a temp file via `writeOutput()` and prints only that path to stdout — capture it directly into `MANIFEST_FILE` as above. There is no `MANIFEST_FILE: <path>` / `STATUS: <exit>` preamble to parse; `EXIT_CODE` is `skill/review.js`'s own exit status.
 
 **On non-zero `EXIT_CODE`:**
 
@@ -149,7 +154,7 @@ Wait for the user's reply.
 - `yes` → **link verification (R14, issue #198) — HARD GATE.** Before `gh api … /comments`, validate every URL embedded in the consolidated review comment body via the shared link validator. The script reads the body from `--file` and auto-derives `expectedRepo` from `parseRemoteOwner(cwd)` and `jiraSite` from `~/.sdlc-cache/jira/` — the skill MUST NOT construct ctx JSON.
 
   ```shell
-<PLUGIN_ROOT>/skills/review-sdlc/scripts/validate_links.sh
+node "<PLUGIN_ROOT>/scripts/util/review-validate-links.js" --file <body-path>
 ```
 
 > **Contract (Input/Output):**
@@ -232,7 +237,7 @@ If verdict is **APPROVED**: skip — nothing to fix.
 Clean up the manifest file and the temporary diff directory by running:
 
 ```shell
-<PLUGIN_ROOT>/skills/review-sdlc/scripts/cleanup.sh "$MANIFEST_FILE"
+node "<PLUGIN_ROOT>/scripts/util/review-cleanup.js" "$MANIFEST_FILE"
 ```
 
 ---

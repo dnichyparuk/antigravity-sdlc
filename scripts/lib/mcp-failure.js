@@ -17,6 +17,7 @@
  *   node mcp-failure.js --classify [--http-status N] [--error-msg X] [--hook-deny Y] [--r-path Z] [--tool T]
  *   node mcp-failure.js --telemetry --class X --tool T --site S --project P --error E --recovered R
  *   node mcp-failure.js --analyze --class X --tool T --site S --project P --error E --recovered R [--session-id ID]
+ *   node mcp-failure.js --hash <value>
  *
  * Exit codes:
  *   0 — success
@@ -473,6 +474,14 @@ if (require.main === module) {
     process.exit(0);
   }
 
-  process.stderr.write('Usage: node mcp-failure.js --classify|--telemetry|--analyze|--record-occurrence [args]\n');
+  // ---- --hash
+  if (hasFlag('hash')) {
+    const value = getArg('hash') || '';
+    const hash  = crypto.createHash('sha256').update(value).digest('hex').slice(0, 12);
+    process.stdout.write(hash + '\n');
+    process.exit(0);
+  }
+
+  process.stderr.write('Usage: node mcp-failure.js --classify|--telemetry|--analyze|--record-occurrence|--hash [args]\n');
   process.exit(2);
 }

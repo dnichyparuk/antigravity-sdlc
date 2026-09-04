@@ -15,12 +15,14 @@ Sub-flow of `/setup-sdlc --guardrails`. Runs skill/guardrails.js to scan the pro
 Run skill/guardrails.js:
 
 ```shell
-<PLUGIN_ROOT>/skills/setup-sdlc/scripts/setup-guardrails_prepare.sh
+GUARDRAILS_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/guardrails.js" --output-file --project-root . --mode {init|add} --json)
+EXIT_CODE=$?
+echo "GUARDRAILS_OUTPUT_FILE=$GUARDRAILS_OUTPUT_FILE"
 ```
 
 Replace `{init|add}` with `add` if `--add` was passed, otherwise `init`.
 
-Parse JSON output. If `errors` non-empty, show errors and stop. Store `signals`, `proposals`, and `existing`.
+Read the JSON manifest at `$GUARDRAILS_OUTPUT_FILE`. If `errors` non-empty, show errors and stop. Store `signals`, `proposals`, `existing`. Run `rm -f "$GUARDRAILS_OUTPUT_FILE"` after storing.
 
 If not in `--add` mode and `existing.count > 0`: Use AskUserQuestion: "N guardrails already configured. Replace all, or use --add to expand?" Options: replace / cancel. On cancel, stop.
 
@@ -77,10 +79,10 @@ Allow multiple custom entries. Custom guardrails are added alongside the standar
 
 ### Step 3 (WRITE) — Write Config
 
-Write selected guardrails via inline Node.js using config library:
+Write selected guardrails via the config-writing CLI:
 
 ```shell
-<PLUGIN_ROOT>/skills/setup-sdlc/scripts/setup-guardrails_write.sh
+node "<PLUGIN_ROOT>/scripts/util/setup-guardrails-write.js" --section plan --value '<GUARDRAILS_JSON>'
 ```
 
 Replace `<GUARDRAILS_JSON>` with the JSON array of selected guardrails. In `--add` mode: prepend existing guardrails from the prepare output to the array.
@@ -88,7 +90,7 @@ Replace `<GUARDRAILS_JSON>` with the JSON array of selected guardrails. In `--ad
 ### Step 4 (VALIDATE) — Run Validation Script
 
 ```shell
-<PLUGIN_ROOT>/skills/setup-sdlc/scripts/setup-guardrails_validate.sh
+node "<PLUGIN_ROOT>/scripts/ci/validate-guardrails.js" --project-root . --json
 ```
 
 Parse output. If `overall` is "pass", report success with count. If "fail", show errors and offer to fix.
@@ -96,7 +98,7 @@ Parse output. If `overall` is "pass", report success with count. If "fail", show
 ## Do Not
 
 - Run full-suite or wide-subset `promptfoo eval` automatically — single targeted test scoped to the change is allowed; tight-loop retries are not.
-- Write config files using Write or Edit tools directly — always use lib/config.js via inline Node.js
+- Write config files using Write or Edit tools directly — always go through `scripts/util/setup-guardrails-write.js`, which wraps lib/config.js
 - Skip AskUserQuestion for user interaction
 - Scan the entire codebase — the prepare script handles scanning
 

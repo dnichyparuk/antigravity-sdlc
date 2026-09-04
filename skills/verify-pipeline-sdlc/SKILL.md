@@ -3,7 +3,7 @@ name: verify-pipeline-sdlc
 description: "Use this skill to analyze a failed CI run on a PR and either apply a minimal fix or emit a proposal. Dispatched automatically by ship-sdlc's verify-pipeline step under --auto, or invoked standalone via /verify-pipeline-sdlc --pr <N>. Triggers on: analyze CI failure, fix failing checks, post-PR CI verification, verify-pipeline."
 user-invocable: true
 argument-hint: "[--pr <number>] [--logs <path-or-string>] [--auto]"
-model: gemini-3.5-flash-medium
+model: gemini-3.7-flash-medium
 ---
 
 # Verify Pipeline (SDLC)
@@ -22,27 +22,39 @@ If both `--pr` and `--logs` are missing, emit `{"status":"abort","reason":"--pr 
 
 If `--logs` is provided: when the value is a filesystem path, read its contents; otherwise treat the value as the log text inline.
 
-If `--logs` is omitted but `--pr` is present (R6): resolve logs internally via `lib/git.js::fetchFailedCheckLogs` for the latest failed run on the PR. The Node code path for this is inline:
+If `--logs` is omitted but `--pr` is present (R6): resolve logs internally via `lib/git.js::fetchFailedCheckLogs` for the latest failed run on the PR.
+
+> **VERBATIM** — Run this command exactly as written, replacing `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict script location pattern: `node "<PLUGIN_ROOT>/scripts/<group>/<script-name>.js"` — the scripts are Node CLI files invoked with `node`. Do not modify, rephrase, or simplify the commands or their flags.
 
 ```shell
-<PLUGIN_ROOT>/skills/verify-pipeline-sdlc/scripts/fetch_logs.sh
+node "<PLUGIN_ROOT>/scripts/util/fetch-logs.js" --pr-number <N>
 ```
 > **Contract (Input/Output):**
-> - **Input**: PR context.
-> - **Output**: Prints CI failure logs to stdout.
+> - **Input**: `--pr-number <N>` — the PR number parsed from `$ARGUMENTS`, passed as an explicit flag. There is no ambient `$PR_NUMBER` environment variable any more; the value is required and must be numeric.
+> - **Output**: Prints the CI failure log excerpt to stdout. Exit 0 on success — and also when no failed check is found or the run link carries no run id, in which case stdout is empty and a one-line diagnostic goes to stderr. Exit 1 on a missing/non-numeric `--pr-number` or an unknown flag; exit 2 on an unexpected crash.
 
 If gh is unauthenticated and logs cannot be resolved, emit `{"status":"abort","reason":"gh not authenticated"}` and stop (E2).
 
 ## Step 2: CLASSIFY — invoke the deterministic classifier (R2)
 
-Pipe the resolved log text into the classifier helper:
+Write the resolved log text to a temp file and pass that path to the classifier helper via the explicit `--logs-file` flag. There is no ambient `$LOGS` environment variable any more — the log text reaches the classifier only as a file it reads or as bytes on its stdin.
 
 ```shell
-<PLUGIN_ROOT>/skills/verify-pipeline-sdlc/scripts/classify_logs.sh
+LOGS_FILE=<path-to-temp-file-holding-the-resolved-log-text>
+node "<PLUGIN_ROOT>/scripts/skill/verify-pipeline-sdlc-classify.js" --logs-file "$LOGS_FILE"
 ```
+
+When the log text is already on a pipe, drop the flag and let the classifier read stdin instead:
+
+```shell
+<producer-of-log-text> | node "<PLUGIN_ROOT>/scripts/skill/verify-pipeline-sdlc-classify.js"
+```
+
+Prefer the `--logs-file` form for real CI logs: it avoids the shell quoting and here-string byte limits that can silently truncate a large excerpt.
+
 > **Contract (Input/Output):**
-> - **Input**: Log text via stdin.
-> - **Output**: Prints JSON verdict on stdout.
+> - **Input**: Log text, via `--logs-file <path>` or — when the flag is omitted — via stdin.
+> - **Output**: Prints the JSON verdict on stdout. Always exits 0: an unreadable `--logs-file` or an internal error still prints `{"category":"unknown","signals":[]}` with a diagnostic on stderr, so classification is never a hard gate.
 
 Read the JSON verdict on stdout: `{"category": "<one of seven>", "signals": [...]}`.
 

@@ -3,7 +3,7 @@ name: harden-sdlc
 description: "Use this skill after an SDLC pipeline failure to analyze hardening surfaces (plan and execute guardrails, review dimensions, copilot instructions) and propose user-approved edits that would prevent the same class of failure next time. Strengthen-only in v1 — never relaxes or removes existing rules. Required arguments: --failure-text <string> --skill <caller-name>. Optional: --step, --operation, --exit-code, --error-type, --user-intent, --args-string. Triggers on: harden, strengthen guardrails, prevent this failure, learn from this failure, after pipeline failure."
 user-invocable: true
 argument-hint: "--failure-text <text> --skill <name> [--step <s>] [--operation <op>]"
-model: gemini-3.5-flash-high
+model: gemini-3.7-flash-high
 ---
 
 # Hardening After a Pipeline Failure
@@ -49,14 +49,25 @@ Pass `--from-issue "$ISSUE_NUM"` to the prepare script invocation in Step 1.
 
 ## Step 1 — CONSUME: Run the Prepare Script (R4, R13, C5–C8)
 
-> **VERBATIM** — Execute this script directly using its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict script location pattern: `<PLUGIN_ROOT>/skills/<skill-name>/scripts/<script-name>.sh`). Do NOT prepend `bash` or `sh`. Do not modify, rephrase, or simplify the commands.
+> **VERBATIM** — Execute this command directly with `node` and the absolute plugin path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict CLI location pattern: `<PLUGIN_ROOT>/scripts/<skill|util|lib>/<script-name>.js`). Do not modify, rephrase, or simplify the flags.
 
 ```shell
-<PLUGIN_ROOT>/skills/harden-sdlc/scripts/prepare.sh
+MANIFEST_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/harden-prepare.js" \
+  ${FAILURE_TEXT:+--failure-text "$FAILURE_TEXT"} \
+  ${FROM_ISSUE:+--from-issue "$FROM_ISSUE"} \
+  --skill "$SKILL_NAME" \
+  --step "$STEP_NAME" \
+  --operation "$OPERATION" \
+  --exit-code "$EXIT_CODE_ARG" \
+  --error-type "$ERROR_TYPE" \
+  --user-intent "$USER_INTENT" \
+  --args-string "$ARGS_STRING" \
+  --output-file)
+EXIT_CODE_PREPARE=$?
 ```
 > **Contract (Input/Output):**
-> - **Input**: Failure text context.
-> - **Output**: Prints JSON manifest of hardening targets.
+> - **Input**: Failure text context, passed as the flags above. `--failure-text` and `--from-issue` are mutually exclusive — emit exactly one of them.
+> - **Output**: Prints the path of a temp file holding the JSON manifest of hardening targets; captured here as `MANIFEST_FILE`, with the command's exit status as `EXIT_CODE_PREPARE`.
 
 Substitute the shell variables with values from the parsed arguments. Empty
 values for optional fields are tolerated.
@@ -105,7 +116,7 @@ in all other cases. Continue to Step 3.
 Use the `Agent` tool with:
 
 - `subagent_type`: `sdlc:harden-orchestrator`
-- `model`: `gemini-3.5-flash-low`
+- `model`: `gemini-3.7-flash-low`
 - `prompt` (exactly two lines, no other content):
 
   ```text
@@ -194,7 +205,7 @@ When the user selects **apply**, validate the proposed change BEFORE writing:
   validate via the canonical guardrails validator:
 
   ```shell
-<PLUGIN_ROOT>/skills/harden-sdlc/scripts/validate_guardrails.sh
+node "<PLUGIN_ROOT>/scripts/ci/validate-guardrails.js" --project-root .
 ```
 > **Contract (Input/Output):**
 > - **Input**: Guardrail JSON.
@@ -209,7 +220,7 @@ When the user selects **apply**, validate the proposed change BEFORE writing:
   by running the validator script against the file:
 
   ```shell
-  <PLUGIN_ROOT>/skills/harden-sdlc/scripts/validate_dimension.sh "<targetFile>"
+  node "<PLUGIN_ROOT>/scripts/util/validate-dimension.js" "<targetFile>"
   ```
   > **Contract (Input/Output):**
   > - **Input**: `<targetFile>`.

@@ -3,7 +3,7 @@ name: jira-sdlc
 description: "Use this skill when creating, editing, reading, viewing, searching, transitioning, commenting on, or linking Jira issues using Atlassian MCP tools. Caches project metadata (custom fields, workflows, transitions, user mappings) to eliminate redundant discovery calls. Supports multi-project repos via jira.projects, and skipping workflow discovery for CI. Arguments: [--project <KEY>] [--force-refresh] [--init-templates] [--site <host>] [--skip-workflow-discovery]. Triggers on: create jira issue, edit jira ticket, search jira, transition jira, jira comment, link jira, assign jira, log work jira, bulk jira operations, manage jira, jira template, read jira, view jira, show jira, get jira, fetch jira, jira details, add comment, comment on jira, reply to jira, jira ticket, jira issue."
 user-invocable: true
 argument-hint: "[--project <KEY>] [--force-refresh] [--init-templates] [--site <host>] [--skip-workflow-discovery]"
-model: gemini-3.5-flash-medium
+model: gemini-3.7-flash-medium
 ---
 
 # Managing Jira Issues
@@ -76,10 +76,11 @@ When `--check` is run without `--site` and the home-cache contains entries for t
 
 ### Script Resolution Block
 
-> **VERBATIM** — Execute this script directly using its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict script location pattern: `<PLUGIN_ROOT>/skills/<skill-name>/scripts/<script-name>.sh`). Do NOT prepend `bash` or `sh`. Do not modify, rephrase, or simplify the commands.
+> **VERBATIM** — Execute this command directly with `node` and the absolute plugin path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict CLI location pattern: `<PLUGIN_ROOT>/scripts/<skill|util|lib>/<script-name>.js`). Do not modify, rephrase, or simplify the flags.
 
 ```shell
-<PLUGIN_ROOT>/skills/jira-sdlc/scripts/prepare.sh
+JIRA_CONTEXT_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/jira.js" $ARGUMENTS --check)
+EXIT_CODE=$?
 ```
 
 Read and parse `JIRA_CONTEXT_FILE`. The `trap` above guarantees cleanup on any exit path — do not add scattered `rm -f` calls.
@@ -104,7 +105,7 @@ Read the check output:
 Load cache:
 
 ```bash
-node "$SCRIPT" --project "$PROJECT_KEY" --load > "$JIRA_CONTEXT_FILE"
+node "<PLUGIN_ROOT>/scripts/skill/jira.js" --project "$PROJECT_KEY" --load > "$JIRA_CONTEXT_FILE"
 ```
 
 ### Handle `--init-templates`
@@ -113,7 +114,7 @@ If `--init-templates` flag is present:
 
 1. Run the init-templates script:
    ```bash
-   INIT_RESULT=$(node "$SCRIPT" --output-file --project "$PROJECT_KEY" --init-templates)
+   INIT_RESULT=$(node "<PLUGIN_ROOT>/scripts/skill/jira.js" --project "$PROJECT_KEY" --init-templates)
    # Append cleanup to the existing trap. Note: the JIRA_CONTEXT_FILE trap from
    # the entry section is still in effect; we extend it here so both files are
    # removed on EXIT/INT/TERM.
@@ -137,7 +138,7 @@ If `--init-templates` flag is present:
        Options: [Suggested template (Recommended)], [other available default templates], [Skip — no template for this type]
    - For each user selection (not "Skip"), copy the template:
      ```bash
-     node "$SCRIPT" --project "$PROJECT_KEY" --copy-template --type "<typeName>" --from "<selectedTemplate>"
+     node "<PLUGIN_ROOT>/scripts/skill/jira.js" --project "$PROJECT_KEY" --copy-template --type "<typeName>" --from "<selectedTemplate>"
      ```
    - Report final results: "N additional templates created from user selections."
 
@@ -289,13 +290,13 @@ Assemble the full cache object:
 Save:
 
 ```bash
-echo '<cache_json>' | node "$SCRIPT" --project "$PROJECT_KEY" --save
+echo '<cache_json>' | node "<PLUGIN_ROOT>/scripts/skill/jira.js" --project "$PROJECT_KEY" --save
 ```
 
 Then load the cache:
 
 ```bash
-node "$SCRIPT" --project "$PROJECT_KEY" --load > "$JIRA_CONTEXT_FILE"
+node "<PLUGIN_ROOT>/scripts/skill/jira.js" --project "$PROJECT_KEY" --load > "$JIRA_CONTEXT_FILE"
 ```
 
 Report: "Cache initialized for `[PROJECT_KEY]` — `[N]` issue types, `[N]` workflow states mapped."
@@ -369,7 +370,8 @@ Skip for read operations. Implements R17 + the cooperative half of R21.
 Skip for read operations. After approval (Step 2.6) and before MCP dispatch, validate every URL embedded in the description payload (for `createJiraIssue`/`editJiraIssue`) and the comment body (for `addCommentToJiraIssue`) via `scripts/skill/jira.js --validate-body`. The script reads the body from stdin and resolves the expected Jira site (`siteUrl`) deterministically from the cached `~/.sdlc-cache/jira/<site>/<KEY>.json` — the skill MUST NOT construct ctx JSON.
 
 ```shell
-<PLUGIN_ROOT>/skills/jira-sdlc/scripts/validate_body.sh
+printf '%s' "$body_or_description" | node "<PLUGIN_ROOT>/scripts/skill/jira.js" --validate-body --project "$PROJECT_KEY" --json
+LINK_EXIT=$?
 ```
 
 For ADF description payloads: extract every `text` node value, concatenate with newlines, and feed that as the body. URLs in ADF link marks must also appear in extracted text or be added explicitly to the validation input.
@@ -382,27 +384,27 @@ On non-zero exit (`LINK_EXIT != 0`):
 - **MCP failure telemetry + dispatch gate (R27/R28 — implements R22 exhausted path):**
 
 > **Telemetry helper conventions (apply to every `mcp-failure.js` callsite below):**
-> - HELPER is resolved inline at the top of each top-level step (R9/R14/R21/R22/R23) rather than once globally because steps may be entered independently. The `find` is idempotent and cheap.
+> - Every callsite invokes `node "<PLUGIN_ROOT>/scripts/lib/mcp-failure.js"` directly with the absolute plugin path. There is no `HELPER` variable to resolve first — write the full path at each callsite, in every step (R9/R14/R21/R22/R23), because steps may be entered independently.
 > - The helper's stdout (`--telemetry` echoes the appended block, `--analyze` emits JSON) is intentionally NOT redirected to `/dev/null` — the block surfaces in the terminal for user visibility into what was written to `.sdlc/learnings/log.md`.
 > - Cross-step session counting (R28 "twice in one invocation") is keyed by `SDLC_SESSION_ID` if set, otherwise by a per-project marker file at `.sdlc/state/mcp-session.id` written on first call. Callers do not need to export `SDLC_SESSION_ID` for the R21 dedup gate to function.
-> - When the helper cannot be resolved (plugin not installed or `find` returns empty and the cwd fallback also misses), each block emits a single stderr WARNING and proceeds non-fatally. The downstream `[ -n "$HELPER" ] && node "$HELPER" ...` guards then skip the call without aborting the surrounding step. The warning satisfies the script-resolution convention while preserving R27's "telemetry is best-effort" design intent.
-> - `ANALYZE_JSON` is the raw JSON string emitted by `node "$HELPER" --analyze ...` — it is NOT an object. To use `.proposal.title` and `.proposal.body`, parse explicitly:
+> - When the command cannot be run (plugin not installed, so the path does not exist) or it exits non-zero, emit a single stderr WARNING and proceed non-fatally — skip the call without aborting the surrounding step. This preserves R27's "telemetry is best-effort" design intent.
+> - `ANALYZE_JSON` is the raw JSON string emitted by `node "<PLUGIN_ROOT>/scripts/lib/mcp-failure.js" --analyze ...` — it is NOT an object. To use `.proposal.title` and `.proposal.body`, parse explicitly:
 >
 >   ```shell
->   PROPOSAL_TITLE=$(printf '%s' "$ANALYZE_JSON" | <PLUGIN_ROOT>/skills/jira-sdlc/scripts/parse_proposal.sh title)
->   PROPOSAL_BODY=$(printf  '%s' "$ANALYZE_JSON" | <PLUGIN_ROOT>/skills/jira-sdlc/scripts/parse_proposal.sh body)
+>   PROPOSAL_TITLE=$(printf '%s' "$ANALYZE_JSON" | node "<PLUGIN_ROOT>/scripts/util/parse-proposal.js" title)
+>   PROPOSAL_BODY=$(printf  '%s' "$ANALYZE_JSON" | node "<PLUGIN_ROOT>/scripts/util/parse-proposal.js" body)
 >   ```
 >
 >   Every "Read `ANALYZE_JSON.proposal.title` / `.proposal.body`" instruction below refers to the result of this parse — pass `$PROPOSAL_BODY` (not raw `$ANALYZE_JSON`) to `error-report-sdlc --error-text`.
 
 ```shell
-<PLUGIN_ROOT>/skills/jira-sdlc/scripts/mcp_failure_link.sh
+node "<PLUGIN_ROOT>/scripts/lib/mcp-failure.js" --telemetry --class link-verification --tool "jira.js --validate-body" --site "$JIRA_SITE" --project "$PROJECT_KEY" --error "link verification abort: $LINK_EXIT" --recovered no
 ```
 
 Then call `--analyze` and surface the returned proposal to the user:
 
 ```bash
-[ -n "$HELPER" ] && ANALYZE_JSON=$(node "$HELPER" --analyze --class link-verification --tool "jira.js --validate-body" --site "$JIRA_SITE" --project "$PROJECT_KEY" --error "link verification abort: $LINK_EXIT" --recovered no --r-path R22)
+ANALYZE_JSON=$(node "<PLUGIN_ROOT>/scripts/lib/mcp-failure.js" --analyze --class link-verification --tool "jira.js --validate-body" --site "$JIRA_SITE" --project "$PROJECT_KEY" --error "link verification abort: $LINK_EXIT" --recovered no --r-path R22)
 ```
 
 Read `ANALYZE_JSON.proposal.title` and `ANALYZE_JSON.proposal.body`; present to user verbatim with prompt "Y (file issue) / edit / skip". On Y, dispatch `error-report-sdlc` with `--error-type mcp-link-verification`, `--skill jira-sdlc`, `--step "Step 2.7"`, `--operation "jira.js --validate-body"`, `--error-text <proposal.body>`, and labels `mcp-failure,class:link-verification`.
@@ -418,13 +420,15 @@ For write operations: precondition — Step 2.6 returned `approve`, Step 2.7 lin
 **MCP failure telemetry on hook deny (R27/R28 — R21 path):** When the PreToolUse hook blocks, call the helper immediately after surfacing the deny reason:
 
 ```shell
-<PLUGIN_ROOT>/skills/jira-sdlc/scripts/mcp_failure_hook.sh
+node "<PLUGIN_ROOT>/scripts/lib/mcp-failure.js" --telemetry --class hook-block --tool "$MCP_TOOL_NAME" --site "$JIRA_SITE" --project "$PROJECT_KEY" --error "$permissionDecisionReason" --recovered no
+HOOK_HASH=$(node "<PLUGIN_ROOT>/scripts/lib/mcp-failure.js" --hash "$permissionDecisionReason")
+HOOK_COUNT=$(node "<PLUGIN_ROOT>/scripts/lib/mcp-failure.js" --record-occurrence --class hook-block --key "$HOOK_HASH")
 ```
 
 When `HOOK_COUNT` equals 2 (same hook deny reason seen twice in this session), call `--analyze` and surface the dispatch gate:
 
 ```bash
-[ -n "$HELPER" ] && [ "$HOOK_COUNT" -eq 2 ] && ANALYZE_JSON=$(node "$HELPER" --analyze --class hook-block --tool "$MCP_TOOL_NAME" --site "$JIRA_SITE" --project "$PROJECT_KEY" --error "$permissionDecisionReason" --recovered no --r-path R21)
+[ "$HOOK_COUNT" -eq 2 ] && ANALYZE_JSON=$(node "<PLUGIN_ROOT>/scripts/lib/mcp-failure.js" --analyze --class hook-block --tool "$MCP_TOOL_NAME" --site "$JIRA_SITE" --project "$PROJECT_KEY" --error "$permissionDecisionReason" --recovered no --r-path R21)
 ```
 
 Read `ANALYZE_JSON.proposal.title` and `ANALYZE_JSON.proposal.body`; present to user verbatim with prompt "Y (file issue) / edit / skip". On Y, dispatch `error-report-sdlc` with `--error-type mcp-hook-block`, `--skill jira-sdlc`, `--step "Step 3"`, `--operation "$MCP_TOOL_NAME"`, `--error-text <proposal.body>`, and labels `mcp-failure,class:hook-block`.
@@ -438,14 +442,14 @@ Read `ANALYZE_JSON.proposal.title` and `ANALYZE_JSON.proposal.body`; present to 
 5. If the primary namespace retry failed, call the helper with `--recovered no` before trying the sibling namespace:
 
 ```shell
-<PLUGIN_ROOT>/skills/jira-sdlc/scripts/mcp_failure_auth.sh
+node "<PLUGIN_ROOT>/scripts/lib/mcp-failure.js" --telemetry --class auth --tool "$MCP_TOOL_NAME" --site "$JIRA_SITE" --project "$PROJECT_KEY" --error "$AUTH_ERROR" --recovered no
 ```
 
 6. If the sibling namespace also fails (dual-namespace exhausted), call `--telemetry` again and then `--analyze` to trigger the R28 dispatch gate:
 
 ```bash
-[ -n "$HELPER" ] && node "$HELPER" --telemetry --class auth --tool "mcp__antigravity_ai_Atlassian__${MCP_TOOL_SUFFIX}" --site "$JIRA_SITE" --project "$PROJECT_KEY" --error "$AUTH_ERROR_SIBLING" --recovered no
-[ -n "$HELPER" ] && ANALYZE_JSON=$(node "$HELPER" --analyze --class auth --tool "$MCP_TOOL_NAME" --site "$JIRA_SITE" --project "$PROJECT_KEY" --error "$AUTH_ERROR" --recovered no --r-path R23)
+node "<PLUGIN_ROOT>/scripts/lib/mcp-failure.js" --telemetry --class auth --tool "mcp__antigravity_ai_Atlassian__${MCP_TOOL_SUFFIX}" --site "$JIRA_SITE" --project "$PROJECT_KEY" --error "$AUTH_ERROR_SIBLING" --recovered no
+ANALYZE_JSON=$(node "<PLUGIN_ROOT>/scripts/lib/mcp-failure.js" --analyze --class auth --tool "$MCP_TOOL_NAME" --site "$JIRA_SITE" --project "$PROJECT_KEY" --error "$AUTH_ERROR" --recovered no --r-path R23)
 ```
 
 Read `ANALYZE_JSON.proposal.title` and `ANALYZE_JSON.proposal.body`; present to user verbatim with prompt "Y (file issue) / edit / skip". On Y, dispatch `error-report-sdlc` with `--error-type mcp-auth`, `--skill jira-sdlc`, `--step "Step 3"`, `--operation "$MCP_TOOL_NAME"`, `--error-text <proposal.body>`, and labels `mcp-failure,class:auth`.
@@ -473,8 +477,8 @@ After operations that reveal new information, update the cache incrementally:
 
 | Trigger | Cache update command |
 |---------|---------------------|
-| New user resolved via lookupJiraAccountId | `echo '{"<name>":"<id>"}' \| node "$SCRIPT" --project "$KEY" --save-field userMappings` |
-| Transition from a status not in workflow cache | `echo '<workflows_json>' \| node "$SCRIPT" --project "$KEY" --save-field workflows` |
+| New user resolved via lookupJiraAccountId | `echo '{"<name>":"<id>"}' \| node "<PLUGIN_ROOT>/scripts/skill/jira.js" --project "$KEY" --save-field userMappings` |
+| Transition from a status not in workflow cache | `echo '<workflows_json>' \| node "<PLUGIN_ROOT>/scripts/skill/jira.js" --project "$KEY" --save-field workflows` |
 | Cache returned stale transition ID (404/400) | **Auto-refresh**: run `--force-refresh`, reload cache, retry operation once |
 | Operation fails with field key or value not in cache | **Auto-refresh**: run `--force-refresh`, reload cache, retry operation once |
 
@@ -500,7 +504,9 @@ After operations that reveal new information, update the cache incrementally:
 When a 400 on create or repeated 400 still fails after cache auto-refresh, call the helper to record telemetry and synthesize the dispatch proposal. Classify: `schema` for field/schema errors, `workflow` for transition errors.
 
 ```shell
-<PLUGIN_ROOT>/skills/jira-sdlc/scripts/mcp_failure_schema.sh
+FAILURE_CLASS=schema  # or "workflow" for transition errors
+node "<PLUGIN_ROOT>/scripts/lib/mcp-failure.js" --telemetry --class "$FAILURE_CLASS" --tool "$MCP_TOOL_NAME" --site "$JIRA_SITE" --project "$PROJECT_KEY" --error "$ERROR_MSG" --recovered no
+ANALYZE_JSON=$(node "<PLUGIN_ROOT>/scripts/lib/mcp-failure.js" --analyze --class "$FAILURE_CLASS" --tool "$MCP_TOOL_NAME" --site "$JIRA_SITE" --project "$PROJECT_KEY" --error "$ERROR_MSG" --recovered no --r-path R9)
 ```
 
 Read `ANALYZE_JSON.proposal.title` and `ANALYZE_JSON.proposal.body`; present to user verbatim with prompt "Y (file issue) / edit / skip". On Y, dispatch `error-report-sdlc` with `--error-type mcp-${FAILURE_CLASS}`, `--skill jira-sdlc`, `--step "Step 3 — Error Recovery"`, `--operation "$MCP_TOOL_NAME"`, `--error-text <proposal.body>`, and labels `mcp-failure,class:${FAILURE_CLASS}`.
@@ -508,7 +514,7 @@ Read `ANALYZE_JSON.proposal.title` and `ANALYZE_JSON.proposal.body`; present to 
 Also call `--telemetry` on every retry (even successful ones) to maintain a per-session failure log:
 
 ```bash
-[ -n "$HELPER" ] && node "$HELPER" --telemetry --class "$FAILURE_CLASS" --tool "$MCP_TOOL_NAME" --site "$JIRA_SITE" --project "$PROJECT_KEY" --error "$ERROR_MSG" --recovered "yes:R9"
+node "<PLUGIN_ROOT>/scripts/lib/mcp-failure.js" --telemetry --class "$FAILURE_CLASS" --tool "$MCP_TOOL_NAME" --site "$JIRA_SITE" --project "$PROJECT_KEY" --error "$ERROR_MSG" --recovered "yes:R9"
 ```
 
 ---
@@ -590,7 +596,8 @@ Also call `--telemetry` on every retry (even successful ones) to maintain a per-
 - `unsampled: true` markers (from `--skip-workflow-discovery` in CI, or from no-sample results above) route transition operations through a live `getTransitionsForJiraIssue` per issue — the skill reuses the existing stale-cache auto-refresh path, so no separate branch is required in Step 3. Treat `unsampled` identically to "transition ID not cached". **When the live `getTransitionsForJiraIssue` call itself fails on an unsampled path (R14 exhausted), record telemetry and trigger the analyze gate (R27/R28):**
 
 ```shell
-<PLUGIN_ROOT>/skills/jira-sdlc/scripts/mcp_failure_workflow.sh
+node "<PLUGIN_ROOT>/scripts/lib/mcp-failure.js" --telemetry --class workflow --tool "getTransitionsForJiraIssue" --site "$JIRA_SITE" --project "$PROJECT_KEY" --error "$TRANSITION_ERROR" --recovered no
+ANALYZE_JSON=$(node "<PLUGIN_ROOT>/scripts/lib/mcp-failure.js" --analyze --class workflow --tool "getTransitionsForJiraIssue" --site "$JIRA_SITE" --project "$PROJECT_KEY" --error "$TRANSITION_ERROR" --recovered no --r-path R14)
 ```
 
 Present `ANALYZE_JSON.proposal.title` and `ANALYZE_JSON.proposal.body` verbatim with prompt "Y (file issue) / edit / skip". On Y, dispatch `error-report-sdlc` with `--error-type mcp-workflow`, `--skill jira-sdlc`, `--step "Step 3 — unsampled fallback"`, `--operation "getTransitionsForJiraIssue"`, `--error-text <proposal.body>`, and labels `mcp-failure,class:workflow`.

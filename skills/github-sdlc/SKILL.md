@@ -3,7 +3,7 @@ name: github-sdlc
 description: "Use this skill when creating, editing, reading, viewing, searching, commenting on, or managing GitHub issues. Leverages the GitHub CLI (gh) to interact with issues directly. Arguments: [--repo <owner/repo>]. Triggers on: create github issue, edit github ticket, search github, github comment, assign github, manage github, github template, read github, view github, show github, get github, fetch github, github details, add comment, comment on github, reply to github, github ticket, github issue."
 user-invocable: true
 argument-hint: "[--repo <owner/repo>]"
-model: gemini-3.5-flash-medium
+model: gemini-3.7-flash-medium
 ---
 
 # Managing GitHub Issues
@@ -25,7 +25,7 @@ close, or reopen — using the GitHub CLI (`gh issue`).
 
 Verify that the `gh` CLI is installed and authenticated.
 
-> **VERBATIM** — Execute this script directly using its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict script location pattern: `<PLUGIN_ROOT>/skills/<skill-name>/scripts/<script-name>.sh`). Do NOT prepend `bash` or `sh`.
+> **VERBATIM** — Run these commands exactly as written. Do not modify, rephrase, or simplify them.
 
 ```bash
 gh auth status >/dev/null 2>&1

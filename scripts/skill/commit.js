@@ -292,7 +292,7 @@ function main() {
   const untrackedFiles = untrackedRaw ? untrackedRaw.split('\n').filter(Boolean) : [];
 
   // Step 10: Get recent commits
-  const commitsRaw    = exec('git log --oneline -15', { cwd: process.cwd() });
+  const commitsRaw    = exec('git log --oneline -5', { cwd: process.cwd() });
   const recentCommits = commitsRaw ? commitsRaw.split('\n').filter(Boolean) : [];
 
   // Step 11: Get last commit message when amending

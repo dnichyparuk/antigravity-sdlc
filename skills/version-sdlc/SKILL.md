@@ -2,8 +2,8 @@
 name: version-sdlc
 description: "Use this skill when bumping a project version, creating a git release tag, generating a changelog, or performing a full semantic release workflow, updating an existing changelog entry for the current version, or retagging the current version at HEAD. Consumes pre-computed context from skill/version.js and handles the complete release process. Use --changelog without a bump type to update the changelog for the already-tagged current version. Use --retag to move an existing tag to HEAD. Arguments: [major|minor|patch|<label>] [--init] [--pre <label>] [--no-push] [--changelog] [--hotfix] [--retag] [--auto]. The positional `<label>` form (e.g. `version-sdlc rc`) is sugar for `--bump patch --pre <label>` and accepts any pre-release label matching `^[a-z][a-z0-9]*$`. Triggers on: version bump, create release, bump version, tag release, generate changelog, semantic versioning, semver bump, pre-release, release candidate, retag release. Use --auto to skip interactive approval prompts (release plan is still displayed)."
 user-invocable: true
-argument-hint: "[major|minor|patch|<label>] [--pre <label>] [--changelog] [--hotfix] [--retag] [--auto]"
-model: gemini-3.5-flash-medium
+argument-hint: "[major|minor|patch|<label>] [--init] [--pre <label>] [--no-push] [--changelog] [--hotfix] [--retag] [--auto]"
+model: gemini-3.7-flash-medium
 ---
 
 # Versioning Releases Skill
@@ -37,13 +37,17 @@ If the system context contains "Plan mode is active":
 
 ### Step 0: Resolve and Run skill/version.js
 
-> **VERBATIM** — Execute this script directly using its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict script location pattern: `<PLUGIN_ROOT>/skills/<skill-name>/scripts/<script-name>.sh`). Do NOT prepend `bash` or `sh`. Do not modify, rephrase, or simplify the commands.
+> **VERBATIM** — Run this block exactly as written, replacing `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict script location pattern: `node "<PLUGIN_ROOT>/scripts/<group>/<script-name>.js"` — the scripts are Node CLI files invoked with `node`. Do not modify, rephrase, or simplify the commands.
 
 ```shell
-<PLUGIN_ROOT>/skills/version-sdlc/scripts/prepare.sh
+VERSION_CONTEXT_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/version.js" --output-file $ARGUMENTS)
+EXIT_CODE=$?
+
+echo "VERSION_CONTEXT_FILE: $VERSION_CONTEXT_FILE"
+echo "STATUS: $EXIT_CODE"
 ```
 
-Read and parse `VERSION_CONTEXT_FILE` as `VERSION_CONTEXT_JSON`. The `trap` above guarantees cleanup on any exit path — do not add scattered `rm -f` calls in success/cancel branches.
+Read and parse `VERSION_CONTEXT_FILE` as `VERSION_CONTEXT_JSON`. `skill/version.js` writes the manifest into the system temp directory and prints only its path, so the OS reclaims it on any exit path — do not add scattered `rm -f` calls in success/cancel branches.
 
 **On non-zero `EXIT_CODE`:**
 
@@ -238,10 +242,10 @@ Resolve any issues found in Step 6 before proceeding. If a blocking issue cannot
 Before executing, check whether the project's installed CI scripts need updating.
 This ensures projects that ran `--init` in a prior session get notified about improvements.
 
-Locate and run the scaffold script in check-only mode:
+Run the scaffold script in check-only mode:
 
 ```shell
-<PLUGIN_ROOT>/skills/version-sdlc/scripts/scaffold_ci.sh
+node "<PLUGIN_ROOT>/scripts/util/scaffold-ci.js" --check-only --output-file
 ```
 
 Run the check (include `--changelog` only when `config.changelog === true`).
@@ -249,16 +253,16 @@ Run the check (include `--changelog` only when `config.changelog === true`).
 > **Why `config.changelog`, not `flags.changelog`, here?** Step 7.5 scaffolds *persistent* CI scripts that ship with the project; the relevant question is whether the project opts into changelog enforcement long-term, not whether `--changelog` was passed for this single release. This is the only legitimate post-CONSUME reference to `config.changelog` per spec R18 — every other site (Step 2 draft, Step 5 display, Step 8.2 write) gates on `flags.changelog`. Do not "fix" this divergence.
 
 ```bash
-SCAFFOLD_OUTPUT_FILE=$(node "$SCRIPT" --check-only --output-file)
+SCAFFOLD_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/util/scaffold-ci.js" --check-only --output-file)
 # Add --changelog if config.changelog === true:
-# SCAFFOLD_OUTPUT_FILE=$(node "$SCRIPT" --check-only --changelog --output-file)
+# SCAFFOLD_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/util/scaffold-ci.js" --check-only --changelog --output-file)
 ```
 
 Read the JSON output. If any files have `action: "outdated"` or `action: "missing"`:
    - Show what changed and which files would be updated (use `installedVersion` / `currentVersion` from the output)
    - Use AskUserQuestion to ask: "Update CI scripts? (yes / no) — this does not block the release."
    - **Auto mode:** When `flags.auto` is true, skip the AskUserQuestion and treat the response as `yes` — update outdated CI scripts automatically.
-   - On `yes`: run `node "$SCRIPT" --force` (add `--changelog` if applicable) to overwrite the outdated files
+   - On `yes`: run `node "<PLUGIN_ROOT>/scripts/util/scaffold-ci.js" --force` (add `--changelog` if applicable) to overwrite the outdated files
    - On `no`: warn and continue with the release
 
 The release proceeds regardless of the user's answer. This is informational, not a gate.
@@ -276,7 +280,8 @@ The release proceeds regardless of the user's answer. This is informational, not
 3b. **Link verification (R17, issue #198) — HARD GATE.** Before `git commit`, validate every URL embedded in the staged CHANGELOG entry (and any release-notes body) via the shared link validator. The script reads the body via `--file` and auto-derives `expectedRepo` from `parseRemoteOwner(cwd)` and `jiraSite` from `~/.sdlc-cache/jira/` — the skill MUST NOT construct ctx JSON. Skip this sub-step entirely when changelog is disabled and no release-notes body was generated.
 
    ```shell
-<PLUGIN_ROOT>/skills/version-sdlc/scripts/validate_links.sh
+node "<PLUGIN_ROOT>/scripts/util/version-validate-links.js" --file <path-to-body>
+LINK_EXIT=$?
 ```
 
 > **Contract (Input/Output):**
