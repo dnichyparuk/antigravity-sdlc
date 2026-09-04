@@ -3,7 +3,7 @@ name: error-report-sdlc
 description: "Internal skill invoked by other SDLC skills when they encounter an actionable error (script crash, CLI failure, persistent API error, build failure after retries). Proposes creating a GitHub issue in dnichyparuk/lift-sdlc to track the error with full context capture, two-gate user consent, and pre-flight verification. NOT user-invocable — only dispatched from within another skill's error handling path. When dispatched, follow ./resources/REFERENCE.md for the full procedure."
 user-invocable: false
 disable-model-invocation: true
-model: gemini-3.7-flash-medium
+model: gemini-3.8-flash-medium
 ---
 
 # Error-to-GitHub Issue Proposal
@@ -91,7 +91,7 @@ prepared payload only, dispatch the dedicated `error-report-orchestrator` agent.
 Use the `Agent` tool with:
 
 - `subagent_type`: `sdlc:error-report-orchestrator`
-- `model`: `gemini-3.7-flash-low` — the Agent tool's `model:` param takes precedence
+- `model`: `gemini-3.8-flash-low` — the Agent tool's `model:` param takes precedence
   over agent frontmatter, keeping this bounded task on a lightweight model regardless
   of the parent context's model
 - `prompt` (exactly three lines, no other content):
@@ -166,7 +166,7 @@ error output or stop behavior.
 - Recursively dispatch this skill on its own prepare-script **or orchestrator**
   crash — log to stderr and stop.
 - Pin `model:` in this skill's frontmatter. The orchestrator agent (Step 4) is the
-  correct place to pin `model: gemini-3.7-flash-low`.
+  correct place to pin `model: gemini-3.8-flash-low`.
 - Run consent gates or `gh issue create` inside the orchestrator agent — it has no
   `Bash` tool.
 - Create a GitHub issue without both consent gates passing.

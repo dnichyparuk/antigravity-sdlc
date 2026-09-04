@@ -16,7 +16,7 @@ The following fields are provided verbatim in the Agent prompt body by execute-p
 waveNumber       — integer (1-based)
 totalWaves       — integer
 qualityTier      — "full" | "balanced" | "minimal"
-escalationBudget — integer (max 2 retries per task; gemini-3.7-flash-low→gemini-3.7-flash-medium→gemini-3.7-flash-high→gemini-3.1-pro-low→gemini-3.1-pro-high)
+escalationBudget — integer (max 2 retries per task; gemini-3.8-flash-low→gemini-3.8-flash-medium→gemini-3.8-flash-high→gemini-3.1-pro-low→gemini-3.1-pro-high)
 tasks            — array of task objects (see shape below)
 priorWaveSummary — context from completed waves (see shape below)
 perTaskTemplate  — full inline content of classifying-and-waving-tasks.md Agent Prompt Template
@@ -32,7 +32,7 @@ batchedTrivialTemplate — full inline content of classifying-and-waving-tasks.m
   "complexity": "Trivial | Standard | Complex",
   "risk": "Low | Medium | High",
   "factSheetPath": "absolute path to the per-task fact sheet written by wave-start",
-  "assignedModel": "gemini-3.7-flash-low | gemini-3.7-flash-medium | gemini-3.1-pro-low | gemini-3.1-pro-high",
+  "assignedModel": "gemini-3.8-flash-low | gemini-3.8-flash-medium | gemini-3.1-pro-low | gemini-3.1-pro-high",
   "verifyToken": "optional — symbol in file"
 }
 ```
@@ -84,21 +84,21 @@ For batch Agents, extract the per-task status from the batch output.
 
 On per-task `NEEDS_CONTEXT` or `BLOCKED` status, or on agent error:
 
-1. Re-dispatch the failing task with full failure context added to the prompt and model escalated one step per the dynamic escalation path (`gemini-3.7-flash-low→gemini-3.7-flash-medium→gemini-3.7-flash-high→gemini-3.1-pro-low→gemini-3.1-pro-high`).
+1. Re-dispatch the failing task with full failure context added to the prompt and model escalated one step per the dynamic escalation path (`gemini-3.8-flash-low→gemini-3.8-flash-medium→gemini-3.8-flash-high→gemini-3.1-pro-low→gemini-3.1-pro-high`).
 2. Record the attempt in the `attempts` array.
 3. Maximum 2 retries per task (tracked across all attempts within this wave).
 4. After 2 retries with continued failure, mark the task `FAILED` in the summary and set `wave.status` to `partial` or `failed`.
 
-Model escalation uses `assignedModel` from the task manifest as the starting point, escalating one step per retry along the fixed ladder `gemini-3.7-flash-low → gemini-3.7-flash-medium → gemini-3.7-flash-high → gemini-3.1-pro-low → gemini-3.1-pro-high`:
-- If starting on `gemini-3.7-flash-low`: Retry 1 = `gemini-3.7-flash-medium`, Retry 2 = `gemini-3.7-flash-high`.
-- If starting on `gemini-3.7-flash-medium`: Retry 1 = `gemini-3.7-flash-high`, Retry 2 = `gemini-3.1-pro-low`.
-- If starting on `gemini-3.7-flash-high`: Retry 1 = `gemini-3.1-pro-low`, Retry 2 = `gemini-3.1-pro-high`.
+Model escalation uses `assignedModel` from the task manifest as the starting point, escalating one step per retry along the fixed ladder `gemini-3.8-flash-low → gemini-3.8-flash-medium → gemini-3.8-flash-high → gemini-3.1-pro-low → gemini-3.1-pro-high`:
+- If starting on `gemini-3.8-flash-low`: Retry 1 = `gemini-3.8-flash-medium`, Retry 2 = `gemini-3.8-flash-high`.
+- If starting on `gemini-3.8-flash-medium`: Retry 1 = `gemini-3.8-flash-high`, Retry 2 = `gemini-3.1-pro-low`.
+- If starting on `gemini-3.8-flash-high`: Retry 1 = `gemini-3.1-pro-low`, Retry 2 = `gemini-3.1-pro-high`.
 - If starting on `gemini-3.1-pro-low`: Retry 1 = `gemini-3.1-pro-high`, Retry 2 = `gemini-3.1-pro-high` (with failure context).
 - If starting on `gemini-3.1-pro-high`: Retry 1 = `gemini-3.1-pro-high` (with failure context), Retry 2 = FAILED (escalate to user, no further retry).
 
 Track every attempt in the `attempts` array regardless of outcome.
 
-**Guardrail invariance on retry:** When constructing the retry prompt, copy the wave manifest's `guardrails` array (and `expectedFiles`) **verbatim** into the new prompt — do NOT regenerate, filter, or omit any entry. Guardrails are wave-level invariants set by main context at wave-build time; the per-task retry inherits the same constraints as the original dispatch at every escalation tier (`gemini-3.7-flash-low → gemini-3.7-flash-medium → gemini-3.7-flash-high → gemini-3.1-pro-low → gemini-3.1-pro-high`).
+**Guardrail invariance on retry:** When constructing the retry prompt, copy the wave manifest's `guardrails` array (and `expectedFiles`) **verbatim** into the new prompt — do NOT regenerate, filter, or omit any entry. Guardrails are wave-level invariants set by main context at wave-build time; the per-task retry inherits the same constraints as the original dispatch at every escalation tier (`gemini-3.8-flash-low → gemini-3.8-flash-medium → gemini-3.8-flash-high → gemini-3.1-pro-low → gemini-3.1-pro-high`).
 
 ### 5. Produce WAVE_SUMMARY
 

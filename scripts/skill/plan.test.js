@@ -121,7 +121,7 @@ test('runExplorePack: falls back to the default plan-explore.js when SDLC_PLAN_E
 
 const FAKE_G17_DISPATCH = {
   subagentType: 'general-purpose',
-  model: 'gemini-3.7-flash-medium',
+  model: 'gemini-3.8-flash-medium',
   promptTemplatePath: '/fake/g17-dimension-coverage-prompt.md',
 };
 

@@ -117,7 +117,7 @@ ist (lines 794–810):**
 4. **Lean Resource References (~40–60 lines saved)**
    - **Manifest JSON Schema (Step 5b, lines 370–385):** Schema is duplicated in both `SKILL.md` and `resources/wave-runner-template.md`. Reference the template resource instead of embedding a 20-line JSON example.
    - **Error Recovery Table (Step 6, lines 637–651):** 15-row table duplicates the dedicated `./resources/recovering-from-failures.md` playbook. A compact 3-line summary with reference to the resource file is sufficient.
-   - **Model Escalation Ladder Descriptions (Step 5b, lines 399–400):** Long parenthetical examples of the model ladder (`gemini-3.7-flash-low → ...`) can be stated as a concise 1-line rule.
+   - **Model Escalation Ladder Descriptions (Step 5b, lines 399–400):** Long parenthetical examples of the model ladder (`gemini-3.8-flash-low → ...`) can be stated as a concise 1-line rule.
 
 ---
 
@@ -327,7 +327,7 @@ The following is a <SYSTEM_MESSAGE> not actually sent by the user. It is provide
 - **Recommendation**: Inline the concise procedural steps directly into `SKILL.md` and eliminate or deprecate `REFERENCE.md`, saving ~200 lines across the skill bundle.
 
 ##### B. Remove Architectural Rationale & Historical Comments
-- **Issue #202 Exposition**: The rationale for using `error-report-orchestrator` instead of skill frontmatter `model:` is explained across 3 separate places (Overview lines 20–24, Step 4 lines 84–90, DO NOT lines 169–171). The prompt only needs the actionable instruction: `Dispatch sdlc:error-report-orchestrator with model: gemini-3.7-flash-low`.
+- **Issue #202 Exposition**: The rationale for using `error-report-orchestrator` instead of skill frontmatter `model:` is explained across 3 separate places (Overview lines 20–24, Step 4 lines 84–90, DO NOT lines 169–171). The prompt only needs the actionable instruction: `Dispatch sdlc:error-report-orchestrator with model: gemini-3.8-flash-low`.
 - **Token-Wasting HTML Comments**: Lines 11–14 contain an internal explanation of `disable-model-invocation: true` and `user-invocabl
 <truncated 518 bytes>
 t spawning issues.
@@ -422,7 +422,7 @@ The following is a <SYSTEM_MESSAGE> not actually sent by the user. It is provide
 
 #### 1. Overview & Baseline
 - **Current Prompt Size**: 533 lines (~34.4 KB, ~8,500 tokens)
-- **Model**: `gemini-3.7-flash-low`
+- **Model**: `gemini-3.8-flash-low`
 - **Core Role**: Release orchestration (bump calculation, CHANGELOG generation, file editing, tagging, pushing, CI verification, and retagging).
 - **Potential Reduction**: **~320 lines (~60% token reduction)** down to **~210 lines** without losing any functionality, safety gates, or release quality.
 
@@ -586,7 +586,7 @@ The following is a <SYSTEM_MESSAGE> not actually sent by the user. It is provide
 
 #### 1. Current State & Metrics
 * **File size**: 368 lines / ~17.7 KB (~4,400 tokens).
-* **Current Model**: `gemini-3.7-flash-high`.
+* **Current Model**: `gemini-3.8-flash-high`.
 * **Primary Role**: Orchestrates pipeline failure hardening by preparing context, running `harden-orchestrator`, presenting proposals to user, validating/applying edits, and appending learning logs.
 
 ---
@@ -668,7 +668,7 @@ name: verify-pipeline-sdlc
 description: "Analyze failed CI runs on a PR; apply minimal fixes or emit a proposal. Triggers on: analyze CI failure, fix failing checks, post-PR CI verification, verify-pipeline."
 user-invocable: true
 argument-hint: "[--pr <number>] [--logs <path-or-string>] [--auto]"
-model: gemini-3.7-flash-medium
+model: gemini-3.8-flash-medium
 ---
 
 # Verify Pipeline (SDLC)

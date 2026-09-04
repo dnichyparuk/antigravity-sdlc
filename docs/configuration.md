@@ -95,7 +95,7 @@ You can customize subagent defaults and review behavior on a per-workspace basis
 ```json
 {
   "review": {
-    "subagent_model": "gemini-3.7-flash-medium"
+    "subagent_model": "gemini-3.8-flash-medium"
   }
 }
 ```

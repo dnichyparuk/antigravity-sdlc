@@ -4,7 +4,7 @@ Use this template in plan-sdlc Step 3 when dispatching the G17 Dimension Coverag
 
 **Purpose:** Detect coverage gaps in the active review-dimension catalog and in the Copilot mirror at `.github/instructions/`, given a finalized plan file. Emit structured findings for Step 4 to splice as a `## Suggested Review Dimensions` advisory block.
 
-**Model:** gemini-3.7-flash-medium (from `g17Dispatch.model` in prepare output — do NOT hardcode)
+**Model:** gemini-3.8-flash-medium (from `g17Dispatch.model` in prepare output — do NOT hardcode)
 
 **Dispatch parameters (from prepare output — `agent-dispatch-script-driven` guardrail):**
 - `subagent_type`: `g17Dispatch.subagentType`

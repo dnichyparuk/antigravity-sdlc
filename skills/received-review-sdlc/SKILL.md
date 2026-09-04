@@ -3,7 +3,7 @@ name: received-review-sdlc
 description: "Use this skill when responding to code review feedback on a pull request or inline reviewer comments. Covers reading, verifying, evaluating, and responding to reviewer comments with a dual self-critique gate — prevents performative agreement and ensures technical rigor. Can be launched manually or automatically after /review-sdlc. Triggers on: process review feedback, respond to review, handle review comments, address PR feedback, fix review findings, received-review."
 user-invocable: true
 argument-hint: "[--pr <number>] [--auto]"
-model: gemini-3.7-flash-high
+model: gemini-3.8-flash-high
 ---
 
 # Responding to Code Review Feedback

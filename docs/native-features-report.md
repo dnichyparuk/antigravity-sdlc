@@ -57,7 +57,7 @@ Lift-SDLC utilizes Antigravity’s subagent dispatching mechanism to achieve pri
   - Context is passed forward via serialized JSON manifests (`.sdlc/tmp/*-manifest.json`).
   - Results are returned via concise string tokens (`WAVE_SUMMARY`, `VERDICT_TOKEN`) or dedicated markdown artifacts (`review-comment.md`).
 * **Native Model Suffix Routing**:
-  - Explicitly targets Antigravity reasoning budget tiers in YAML frontmatter (`gemini-3.7-flash-low`, `gemini-3.7-flash-medium`, `gemini-3.7-flash-high`, `gemini-3.1-pro-high`).
+  - Explicitly targets Antigravity reasoning budget tiers in YAML frontmatter (`gemini-3.8-flash-low`, `gemini-3.8-flash-medium`, `gemini-3.8-flash-high`, `gemini-3.1-pro-high`).
 
 ---
 

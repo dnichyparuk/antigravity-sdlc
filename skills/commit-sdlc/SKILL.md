@@ -3,7 +3,7 @@ name: commit-sdlc
 description: "Use this skill when committing staged changes, creating a git commit, or generating a commit message. Analyzes staged diff and recent commit history to generate a message matching the project's style. Stashes unstaged changes to isolate the commit, commits after user confirmation, and auto-restores the stash. Arguments: [--no-stash] [--scope <scope>] [--type <type>] [--amend] [--auto] [--force-default-branch]. Use --auto to skip interactive approval. Triggers on: commit changes, create commit, write commit message, git commit, smart commit, commit staged, stage and commit."
 user-invocable: true
 argument-hint: "[--no-stash] [--scope <scope>] [--type <type>] [--amend] [--auto] [--force-default-branch]"
-model: gemini-3.7-flash-medium
+model: gemini-3.8-flash-medium
 ---
 
 
@@ -91,7 +91,7 @@ To keep the main context clean and bound the orchestrator's input to the prepare
 Use the `Agent` tool with:
 
 - `subagent_type`: `sdlc:commit-orchestrator`
-- `model`: `gemini-3.7-flash-low` (overrides agent frontmatter to keep this bounded task on a lightweight model)
+- `model`: `gemini-3.8-flash-low` (overrides agent frontmatter to keep this bounded task on a lightweight model)
 - `prompt` (exactly two lines, no other content):
 
   ```text

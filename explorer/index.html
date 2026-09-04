@@ -753,7 +753,7 @@
           <div class="node" style="min-width:180px;">
             <div class="node-icon">⚡</div>
             <div class="node-title">3. Scatter Subagents</div>
-            <div class="node-sub">Parallel Subagents<br>gemini-3.7-flash</div>
+            <div class="node-sub">Parallel Subagents<br>gemini-3.8-flash</div>
           </div>
           <div class="arrow-right">➔</div>
           <div class="node" style="min-width:180px;">
@@ -1139,13 +1139,13 @@ openspec-task:
     let currentContractFilter = 'all';
 
     const DIMENSIONS_DATA = [
-      { name: 'security-review', severity: 'critical', triggers: ['src/auth/**', '**/crypto/**', '**/*.pem', '**/keys/**'], model: 'gemini-3.7-flash-medium', desc: 'Analyzes code diff for authentication bypasses, credential leakage, SQL injection, and cryptographic weaknesses.' },
-      { name: 'performance', severity: 'high', triggers: ['src/db/**', '**/queries/**', '**/cache/**', '**/*pool*'], model: 'gemini-3.7-flash-medium', desc: 'Detects N+1 query patterns, unindexed table scans, connection pool leaks, and memory bottlenecks.' },
-      { name: 'architecture', severity: 'high', triggers: ['src/core/**', 'src/lib/**', '**/interfaces/**'], model: 'gemini-3.7-flash-medium', desc: 'Validates module decoupling, clean context boundaries, circular dependency hazards, and layering integrity.' },
-      { name: 'testing', severity: 'medium', triggers: ['**/*.test.js', '**/*.spec.ts', 'tests/**'], model: 'gemini-3.7-flash-medium', desc: 'Verifies test coverage completeness, mock isolation, and edge-case boundary testing.' },
-      { name: 'docs', severity: 'low', triggers: ['**/*.md', 'docs/**', '**/README*'], model: 'gemini-3.7-flash-low', desc: 'Checks markdown link integrity, API reference synchronization, and documentation consistency.' },
-      { name: 'correctness', severity: 'high', triggers: ['**/*.js', '**/*.ts', '**/*.py'], model: 'gemini-3.7-flash-medium', desc: 'Validates algorithmic logic, null pointer safety, edge case handlers, and error propagation.' },
-      { name: 'guardrails', severity: 'critical', triggers: ['.sdlc/**', 'hooks.json', 'hooks/**'], model: 'gemini-3.7-flash-medium', desc: 'Ensures no violation of SDLC state persistence rules, atomic writes, or hook execution contracts.' }
+      { name: 'security-review', severity: 'critical', triggers: ['src/auth/**', '**/crypto/**', '**/*.pem', '**/keys/**'], model: 'gemini-3.8-flash-medium', desc: 'Analyzes code diff for authentication bypasses, credential leakage, SQL injection, and cryptographic weaknesses.' },
+      { name: 'performance', severity: 'high', triggers: ['src/db/**', '**/queries/**', '**/cache/**', '**/*pool*'], model: 'gemini-3.8-flash-medium', desc: 'Detects N+1 query patterns, unindexed table scans, connection pool leaks, and memory bottlenecks.' },
+      { name: 'architecture', severity: 'high', triggers: ['src/core/**', 'src/lib/**', '**/interfaces/**'], model: 'gemini-3.8-flash-medium', desc: 'Validates module decoupling, clean context boundaries, circular dependency hazards, and layering integrity.' },
+      { name: 'testing', severity: 'medium', triggers: ['**/*.test.js', '**/*.spec.ts', 'tests/**'], model: 'gemini-3.8-flash-medium', desc: 'Verifies test coverage completeness, mock isolation, and edge-case boundary testing.' },
+      { name: 'docs', severity: 'low', triggers: ['**/*.md', 'docs/**', '**/README*'], model: 'gemini-3.8-flash-low', desc: 'Checks markdown link integrity, API reference synchronization, and documentation consistency.' },
+      { name: 'correctness', severity: 'high', triggers: ['**/*.js', '**/*.ts', '**/*.py'], model: 'gemini-3.8-flash-medium', desc: 'Validates algorithmic logic, null pointer safety, edge case handlers, and error propagation.' },
+      { name: 'guardrails', severity: 'critical', triggers: ['.sdlc/**', 'hooks.json', 'hooks/**'], model: 'gemini-3.8-flash-medium', desc: 'Ensures no violation of SDLC state persistence rules, atomic writes, or hook execution contracts.' }
     ];
 
     const CONTRACT_DETAILS = {
@@ -1249,7 +1249,7 @@ openspec-task:
       "id": 1,
       "status": "completed",
       "tasks": [
-        { "id": "T1", "status": "completed", "retries": 0, "modelEngine": "gemini-3.7-flash-low", "files": ["src/auth/jwt.js"] }
+        { "id": "T1", "status": "completed", "retries": 0, "modelEngine": "gemini-3.8-flash-low", "files": ["src/auth/jwt.js"] }
       ]
     }
   ]
@@ -1441,7 +1441,7 @@ openspec-task:
     "allowedScopes": ["auth", "api", "ui", "ci"],
     "subjectPattern": "^[a-z]+(\\\\(.+\\\\))?: .+"
   },
-  "review": { "subagent_model": "gemini-3.7-flash-medium" }
+  "review": { "subagent_model": "gemini-3.8-flash-medium" }
 }`
       },
       'local-config': {
@@ -1616,34 +1616,34 @@ openspec-task:
     };
 
     const SKILLS_DATA = [
-      { name: '/setup-sdlc', model: 'gemini-3.7-flash-medium', phase: 'Initialization', desc: 'Initializes guardrails, code review dimensions, and templates for a project.', flags: ['--tier', '--force'], orchestrator: 'None' },
-      { name: '/plan-sdlc', model: 'gemini-3.7-flash-medium', phase: 'Planning', desc: 'Scopes requirements, creates discovery brief, and generates structured implementation plan.', flags: ['--fast', '--depth'], orchestrator: 'plan-explore-orchestrator, plan-generation-orchestrator' },
-      { name: '/execute-plan-sdlc', model: 'gemini-3.7-flash-medium', phase: 'Execution', desc: 'Executes implementation plan systematically in waves with model tier escalation.', flags: ['--quality', '--wave'], orchestrator: 'plan-execution-validator, wave-runner' },
-      { name: '/commit-sdlc', model: 'gemini-3.7-flash-medium', phase: 'Committing', desc: 'Generates smart, conventional commit messages matching repository history.', flags: ['--auto', '--amend', '--type', '--scope'], orchestrator: 'commit-orchestrator' },
-      { name: '/review-sdlc', model: 'gemini-3.7-flash-medium', phase: 'Review', desc: 'Scatter-gather multi-dimension automated code review.', flags: ['--committed', '--all', '--staged'], orchestrator: 'review-orchestrator' },
-      { name: '/pr-sdlc', model: 'gemini-3.7-flash-high', phase: 'Pull Request', desc: 'Generates structured PR title and description and opens pull request via gh CLI.', flags: ['--draft', '--fill'], orchestrator: 'None' },
-      { name: '/received-review-sdlc', model: 'gemini-3.7-flash-high', phase: 'Review Handling', desc: 'Analyzes code review feedback on an open PR and applies required fixes.', flags: ['--auto-fix'], orchestrator: 'None' },
-      { name: '/verify-pipeline-sdlc', model: 'gemini-3.7-flash-high', phase: 'CI Verification', desc: 'Monitors, verifies, and diagnoses CI/CD GitHub Actions pipeline runs.', flags: ['--watch', '--fix'], orchestrator: 'None' },
-      { name: '/version-sdlc', model: 'gemini-3.7-flash-medium', phase: 'Versioning', desc: 'Manages semantic version bumping and changelog generation.', flags: ['--minor', '--patch', '--major'], orchestrator: 'None' },
-      { name: '/ship-sdlc', model: 'gemini-3.7-flash-medium', phase: 'Release', desc: 'End-to-end shipping pipeline orchestrator (Review -> Verify -> Merge -> Release).', flags: ['--quality', '--auto', '--skip'], orchestrator: 'Delegates to sub-skills' },
-      { name: '/error-report-sdlc', model: 'gemini-3.7-flash-medium', phase: 'Recovery', desc: 'Fills ToolingError.md for plugin bugs or runtime failures.', flags: ['--issue'], orchestrator: 'error-report-orchestrator' },
-      { name: '/harden-sdlc', model: 'gemini-3.7-flash-high', phase: 'Hardening', desc: 'Analyzes pipeline failures to strengthen guardrails and dimensions.', flags: ['--classify'], orchestrator: 'harden-orchestrator' },
-      { name: '/github-sdlc', model: 'gemini-3.7-flash-medium', phase: 'Issue Tracking', desc: 'Integrates with GitHub Issues for ticket scoping.', flags: ['view', 'list'], orchestrator: 'None' },
-      { name: '/jira-sdlc', model: 'gemini-3.7-flash-medium', phase: 'Issue Tracking', desc: 'Integrates with Jira for ticket tracking and updates.', flags: ['view', 'issue'], orchestrator: 'None' }
+      { name: '/setup-sdlc', model: 'gemini-3.8-flash-medium', phase: 'Initialization', desc: 'Initializes guardrails, code review dimensions, and templates for a project.', flags: ['--tier', '--force'], orchestrator: 'None' },
+      { name: '/plan-sdlc', model: 'gemini-3.8-flash-medium', phase: 'Planning', desc: 'Scopes requirements, creates discovery brief, and generates structured implementation plan.', flags: ['--fast', '--depth'], orchestrator: 'plan-explore-orchestrator, plan-generation-orchestrator' },
+      { name: '/execute-plan-sdlc', model: 'gemini-3.8-flash-medium', phase: 'Execution', desc: 'Executes implementation plan systematically in waves with model tier escalation.', flags: ['--quality', '--wave'], orchestrator: 'plan-execution-validator, wave-runner' },
+      { name: '/commit-sdlc', model: 'gemini-3.8-flash-medium', phase: 'Committing', desc: 'Generates smart, conventional commit messages matching repository history.', flags: ['--auto', '--amend', '--type', '--scope'], orchestrator: 'commit-orchestrator' },
+      { name: '/review-sdlc', model: 'gemini-3.8-flash-medium', phase: 'Review', desc: 'Scatter-gather multi-dimension automated code review.', flags: ['--committed', '--all', '--staged'], orchestrator: 'review-orchestrator' },
+      { name: '/pr-sdlc', model: 'gemini-3.8-flash-high', phase: 'Pull Request', desc: 'Generates structured PR title and description and opens pull request via gh CLI.', flags: ['--draft', '--fill'], orchestrator: 'None' },
+      { name: '/received-review-sdlc', model: 'gemini-3.8-flash-high', phase: 'Review Handling', desc: 'Analyzes code review feedback on an open PR and applies required fixes.', flags: ['--auto-fix'], orchestrator: 'None' },
+      { name: '/verify-pipeline-sdlc', model: 'gemini-3.8-flash-high', phase: 'CI Verification', desc: 'Monitors, verifies, and diagnoses CI/CD GitHub Actions pipeline runs.', flags: ['--watch', '--fix'], orchestrator: 'None' },
+      { name: '/version-sdlc', model: 'gemini-3.8-flash-medium', phase: 'Versioning', desc: 'Manages semantic version bumping and changelog generation.', flags: ['--minor', '--patch', '--major'], orchestrator: 'None' },
+      { name: '/ship-sdlc', model: 'gemini-3.8-flash-medium', phase: 'Release', desc: 'End-to-end shipping pipeline orchestrator (Review -> Verify -> Merge -> Release).', flags: ['--quality', '--auto', '--skip'], orchestrator: 'Delegates to sub-skills' },
+      { name: '/error-report-sdlc', model: 'gemini-3.8-flash-medium', phase: 'Recovery', desc: 'Fills ToolingError.md for plugin bugs or runtime failures.', flags: ['--issue'], orchestrator: 'error-report-orchestrator' },
+      { name: '/harden-sdlc', model: 'gemini-3.8-flash-high', phase: 'Hardening', desc: 'Analyzes pipeline failures to strengthen guardrails and dimensions.', flags: ['--classify'], orchestrator: 'harden-orchestrator' },
+      { name: '/github-sdlc', model: 'gemini-3.8-flash-medium', phase: 'Issue Tracking', desc: 'Integrates with GitHub Issues for ticket scoping.', flags: ['view', 'list'], orchestrator: 'None' },
+      { name: '/jira-sdlc', model: 'gemini-3.8-flash-medium', phase: 'Issue Tracking', desc: 'Integrates with Jira for ticket tracking and updates.', flags: ['view', 'issue'], orchestrator: 'None' }
     ];
 
     const AGENTS_DATA = [
-      { name: 'plan-explore-orchestrator', type: 'Orchestrator', model: 'gemini-3.7-flash-low', source: 'agents/plan-explore-orchestrator.md', desc: 'Derives 3-7 discovery dimensions and dispatches parallel research subagents to produce discovery-brief.md.' },
+      { name: 'plan-explore-orchestrator', type: 'Orchestrator', model: 'gemini-3.8-flash-low', source: 'agents/plan-explore-orchestrator.md', desc: 'Derives 3-7 discovery dimensions and dispatches parallel research subagents to produce discovery-brief.md.' },
       { name: 'plan-generation-orchestrator', type: 'Orchestrator', model: 'gemini-3.1-pro-high', source: 'agents/plan-generation-orchestrator.md', desc: 'Receives the exploration brief and drafts the structured implementation plan.' },
       { name: 'plan-execution-validator', type: 'Orchestrator', model: 'gemini-3.1-pro-low', source: 'agents/plan-execution-validator.md', desc: 'Validates plan integrity (circular dependencies, file conflicts, wave risks).' },
-      { name: 'commit-orchestrator', type: 'Orchestrator', model: 'gemini-3.7-flash-low', source: 'agents/commit-orchestrator.md', desc: 'Reads commit manifest, detects repository commit style, and generates a single commit message string.' },
-      { name: 'review-orchestrator', type: 'Orchestrator', model: 'gemini-3.7-flash-low', source: 'agents/review-orchestrator.md', desc: 'Multi-dimension review gatherer. Dispatches parallel subagents, deduplicates findings, and writes review-comment.md.' },
-      { name: 'harden-orchestrator', type: 'Orchestrator', model: 'gemini-3.7-flash-low', source: 'agents/harden-orchestrator.md', desc: 'Classifies failure cause (user-code vs plugin-defect) and emits hardening proposals JSON.' },
-      { name: 'error-report-orchestrator', type: 'Orchestrator', model: 'gemini-3.7-flash-low', source: 'agents/error-report-orchestrator.md', desc: 'Fills ToolingError.md template for posting upstream plugin crash reports.' },
-      { name: 'wave-runner', type: 'Ad-Hoc Subagent', model: 'gemini-3.7-flash-low (escalating)', source: 'execute-plan-sdlc', desc: 'Executes a plan wave in parallel, manages per-task retries with model tier escalation.' },
-      { name: 'per-task coding agent', type: 'Ad-Hoc Subagent', model: 'gemini-3.7-flash-low -> pro-high', source: 'execute-plan-sdlc', desc: 'Implements a single plan task, writes code, and runs local verifications.' },
-      { name: 'dimension reviewer', type: 'Ad-Hoc Subagent', model: 'gemini-3.7-flash-medium', source: 'review-sdlc', desc: 'Evaluates code diff for a single review dimension (security, performance, docs).' },
-      { name: 'discovery subagent', type: 'Ad-Hoc Subagent', model: 'gemini-3.7-flash-low / pro-low', source: 'plan-sdlc', desc: 'Explores codebase or web sources for one planning dimension.' }
+      { name: 'commit-orchestrator', type: 'Orchestrator', model: 'gemini-3.8-flash-low', source: 'agents/commit-orchestrator.md', desc: 'Reads commit manifest, detects repository commit style, and generates a single commit message string.' },
+      { name: 'review-orchestrator', type: 'Orchestrator', model: 'gemini-3.8-flash-low', source: 'agents/review-orchestrator.md', desc: 'Multi-dimension review gatherer. Dispatches parallel subagents, deduplicates findings, and writes review-comment.md.' },
+      { name: 'harden-orchestrator', type: 'Orchestrator', model: 'gemini-3.8-flash-low', source: 'agents/harden-orchestrator.md', desc: 'Classifies failure cause (user-code vs plugin-defect) and emits hardening proposals JSON.' },
+      { name: 'error-report-orchestrator', type: 'Orchestrator', model: 'gemini-3.8-flash-low', source: 'agents/error-report-orchestrator.md', desc: 'Fills ToolingError.md template for posting upstream plugin crash reports.' },
+      { name: 'wave-runner', type: 'Ad-Hoc Subagent', model: 'gemini-3.8-flash-low (escalating)', source: 'execute-plan-sdlc', desc: 'Executes a plan wave in parallel, manages per-task retries with model tier escalation.' },
+      { name: 'per-task coding agent', type: 'Ad-Hoc Subagent', model: 'gemini-3.8-flash-low -> pro-high', source: 'execute-plan-sdlc', desc: 'Implements a single plan task, writes code, and runs local verifications.' },
+      { name: 'dimension reviewer', type: 'Ad-Hoc Subagent', model: 'gemini-3.8-flash-medium', source: 'review-sdlc', desc: 'Evaluates code diff for a single review dimension (security, performance, docs).' },
+      { name: 'discovery subagent', type: 'Ad-Hoc Subagent', model: 'gemini-3.8-flash-low / pro-low', source: 'plan-sdlc', desc: 'Explores codebase or web sources for one planning dimension.' }
     ];
 
     const PHASE_MAPPING = {

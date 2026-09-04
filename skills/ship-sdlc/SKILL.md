@@ -3,7 +3,7 @@ name: ship-sdlc
 description: "Use this skill when shipping a feature end-to-end after plan acceptance: executing, committing, reviewing, fixing critical issues, versioning, and opening a PR in one flow. Dispatches every sub-skill (including execute-plan-sdlc) as an Agent for context isolation, with structured return values driving the pipeline state machine. Arguments: [--auto] [--steps <csv>] [--quick] [--quality full|balanced|minimal] [--bump patch|minor|major|<label>] [--draft] [--dry-run] [--resume] [--workspace branch|worktree|prompt] [--branch | --tree] [--openspec-change <name>] [--init-config] [--gc] [--ttl-days <N>]. The `<label>` form for --bump (e.g. `--bump rc`) is forwarded to version-sdlc, where it is interpreted as `--bump patch --pre <label>`; labels must match `^[a-z][a-z0-9]*$`. Triggers on: ship it, ship this, full pipeline, execute to PR, ship feature, run the whole thing."
 user-invocable: true
 argument-hint: "[--auto] [--steps <csv>] [--quick] [--quality full|balanced|minimal] [--bump patch|minor|major|<label>] [--draft] [--dry-run] [--resume] [--workspace branch|worktree|prompt] [--branch | --tree] [--openspec-change <name>] [--init-config] [--gc] [--ttl-days <N>]"
-model: gemini-3.7-flash-medium
+model: gemini-3.8-flash-medium
 ---
 
 # Ship Pipeline
@@ -581,11 +581,11 @@ Parse the JSON line. Branch on `status`:
    > Wave verify-pipeline failed for PR #N. <X> failed checks: <names>.
    >
    > Options: **analyze** (Recommended) | **skip** | **abort**
-   - **analyze**: dispatch `verify-pipeline-sdlc` subagent (Agent tool, model gemini-3.7-flash-high) with `--pr <N>` and `--logs <inline-log-excerpt-from-failedChecks>`. On verdict `fix-applied`, dispatch `commit-sdlc` (Agent tool, model gemini-3.7-flash-medium, `--auto`) directly to commit and push. Then re-run verify-pipeline (loop). Iteration cap = `flags.verifyPipelineMaxIterations` (default 3); after cap, log warning and proceed to `await-remote-review`. The pre-existing `commit-fixes` step entry (already visited before `pr`) is NOT involved — this dispatch is direct via the Agent tool.
+   - **analyze**: dispatch `verify-pipeline-sdlc` subagent (Agent tool, model gemini-3.8-flash-high) with `--pr <N>` and `--logs <inline-log-excerpt-from-failedChecks>`. On verdict `fix-applied`, dispatch `commit-sdlc` (Agent tool, model gemini-3.8-flash-medium, `--auto`) directly to commit and push. Then re-run verify-pipeline (loop). Iteration cap = `flags.verifyPipelineMaxIterations` (default 3); after cap, log warning and proceed to `await-remote-review`. The pre-existing `commit-fixes` step entry (already visited before `pr`) is NOT involved — this dispatch is direct via the Agent tool.
    - **skip**: log warning, proceed to `await-remote-review`.
    - **abort**: write `verifyPipelineExhausted: true` to the ship state file, exit pipeline 1.
 
-   **`status === "failed"`** AND `flags.auto === true` — non-interactive. Directly dispatch `verify-pipeline-sdlc` subagent (Agent tool, model gemini-3.7-flash-high) with `--pr <N> --logs <excerpt> --auto`. On `fix-applied`, dispatch `commit-sdlc --auto` directly (Agent tool, model gemini-3.7-flash-medium). Loop with the same iteration cap (`flags.verifyPipelineMaxIterations`). On cap exhaustion, log warning and proceed.
+   **`status === "failed"`** AND `flags.auto === true` — non-interactive. Directly dispatch `verify-pipeline-sdlc` subagent (Agent tool, model gemini-3.8-flash-high) with `--pr <N> --logs <excerpt> --auto`. On `fix-applied`, dispatch `commit-sdlc --auto` directly (Agent tool, model gemini-3.8-flash-medium). Loop with the same iteration cap (`flags.verifyPipelineMaxIterations`). On cap exhaustion, log warning and proceed.
 
    **`status === "timeout"`** — log warning `verify-pipeline: timeout after Ns`. The script has already written `verifyPipelineExhausted: true` to the state file. Proceed to `await-remote-review`.
 
@@ -601,7 +601,7 @@ node "<PLUGIN_ROOT>/scripts/util/await-review.js" $STEP_ARGS --state-file "$SHIP
 
 Parse the JSON line. Branch on `status`:
 
-   **`status === "actionable"`** — directly dispatch `received-review-sdlc` (Agent tool, model gemini-3.7-flash-high) with `--pr <verdict.prNumber>` (and `--auto` when `flags.auto === true`). After the subagent completes, run `git status --porcelain` in the main context; if there are working-tree changes, directly dispatch `commit-sdlc` (Agent tool, model gemini-3.7-flash-medium, `--auto`) to commit and push. The pre-existing `received-review` and `commit-fixes` step entries (already visited before `pr`) are NOT involved — these dispatches are direct via the Agent tool.
+   **`status === "actionable"`** — directly dispatch `received-review-sdlc` (Agent tool, model gemini-3.8-flash-high) with `--pr <verdict.prNumber>` (and `--auto` when `flags.auto === true`). After the subagent completes, run `git status --porcelain` in the main context; if there are working-tree changes, directly dispatch `commit-sdlc` (Agent tool, model gemini-3.8-flash-medium, `--auto`) to commit and push. The pre-existing `received-review` and `commit-fixes` step entries (already visited before `pr`) are NOT involved — these dispatches are direct via the Agent tool.
 
    **`status === "approved-clean"`** — log `await-remote-review: APPROVED by <reviewer>` and proceed. Do NOT dispatch received-review-sdlc.
 

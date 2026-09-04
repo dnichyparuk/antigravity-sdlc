@@ -7,7 +7,7 @@ triggers:
   - "skills/*/resources/*.md"
   - "agents/*.md"
 severity: low
-model: gemini-3.7-flash-medium
+model: gemini-3.8-flash-medium
 ---
 
 # Documentation Review

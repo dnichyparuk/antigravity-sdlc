@@ -73,9 +73,9 @@ flowchart TD
 * 🔍 **Plan Review 1 (Plan Execution Validator)**:
   - Dispatches [`plan-execution-validator`](../agents/plan-execution-validator.md) (`gemini-3.1-pro-low`) in clean context to validate plan integrity, circular dependencies, file collision risks, and wave structure.
 * ⚡ **Parallel Wave Runner**:
-  - Dispatches `wave-runner` (`gemini-3.7-flash-low`) to execute tasks wave-by-wave.
+  - Dispatches `wave-runner` (`gemini-3.8-flash-low`) to execute tasks wave-by-wave.
   - Fans out `per-task coding agent` subagents in parallel to write files and run local unit tests.
-  - **Model Escalation Ladder**: If a task fails verification, `wave-runner` retries up to 2 times, escalating model engine tier: `gemini-3.7-flash-low` $\rightarrow$ `gemini-3.7-flash-medium` $\rightarrow$ `gemini-3.7-flash-high` $\rightarrow$ `gemini-3.1-pro-low`.
+  - **Model Escalation Ladder**: If a task fails verification, `wave-runner` retries up to 2 times, escalating model engine tier: `gemini-3.8-flash-low` $\rightarrow$ `gemini-3.8-flash-medium` $\rightarrow$ `gemini-3.8-flash-high` $\rightarrow$ `gemini-3.1-pro-low`.
 * 🔍 **Plan Review 2 (Spec Compliance Reviewer)**:
   - At the end of each wave, runs `spec-compliance-reviewer` to verify that all task deliverables strictly conform to `implementation_plan.md` requirements before marking the wave completed.
 
@@ -83,7 +83,7 @@ flowchart TD
 
 ### Step 5.2: Conventional Smart Commit (`/commit-sdlc`)
 * Serializes staged git diff to `.sdlc/tmp/commit-manifest.json`.
-* Dispatches [`commit-orchestrator`](../agents/commit-orchestrator.md) (`gemini-3.7-flash-low`) in clean context.
+* Dispatches [`commit-orchestrator`](../agents/commit-orchestrator.md) (`gemini-3.8-flash-low`) in clean context.
 * Analyzes recent commit history style and `.sdlc/config.json` regex rules (`allowedTypes`, `allowedScopes`, `subjectPattern`).
 * Returns a single conventional commit message string (e.g. `feat(auth): implement OAuth2 token rotation (#42)`) and executes git commit.
 
@@ -91,7 +91,7 @@ flowchart TD
 
 ### Step 5.3: Scatter-Gather Code Review (`/review-sdlc`)
 * Serializes diff payload to `.sdlc/tmp/review-manifest.json`.
-* Dispatches [`review-orchestrator`](../agents/review-orchestrator.md) (`gemini-3.7-flash-low`) in clean context.
+* Dispatches [`review-orchestrator`](../agents/review-orchestrator.md) (`gemini-3.8-flash-low`) in clean context.
 * 🔍 **Code Review 1 — Scatter Phase (Parallel Dimension Reviewers)**:
   - Fans out targeted subagents in parallel across configured dimensions (`security-review`, `performance`, `docs`, `architecture`, `testing`). Each subagent reviews diff hunks for its specific lens.
 * 🔍 **Code Review 2 — Gather & Critique Phase**:
@@ -105,7 +105,7 @@ flowchart TD
 ### Step 5.4: Conditional Received Review & Fix Loop (`/received-review-sdlc`)
 * Checks findings against `flags.reviewThreshold` (`critical`, `high`, `medium`, `low`).
 * **If threshold met** (e.g. `critical` or `high` findings present):
-  1. Dispatches [`received-review-sdlc`](../skills/received-review-sdlc/SKILL.md) (`gemini-3.7-flash-high`) to process review feedback.
+  1. Dispatches [`received-review-sdlc`](../skills/received-review-sdlc/SKILL.md) (`gemini-3.8-flash-high`) to process review feedback.
   2. Implements required code fixes for "will fix" items.
   3. Re-runs unit tests to verify fixes.
   4. 📝 **Fix Commit**: Dispatches `/commit-sdlc --auto` to create a dedicated fix commit (`fix(review): apply code review feedback`).
@@ -128,7 +128,7 @@ flowchart TD
 ### Step 5.7: Optional CI Verification & Hardening (`/verify-pipeline-sdlc` & `/harden-sdlc`)
 * 🧪 **CI Pipeline Verification**: Interfaces with GitHub Actions to monitor PR build status.
 * 🛡️ **Hardening Review (On CI Failure)**:
-  - If CI fails, dispatches [`harden-orchestrator`](../agents/harden-orchestrator.md) (`gemini-3.7-flash-low`).
+  - If CI fails, dispatches [`harden-orchestrator`](../agents/harden-orchestrator.md) (`gemini-3.8-flash-low`).
   - Classifies root cause (`user-code` vs `plugin-defect`).
   - Emits `harden-proposal.json` to strengthen pre-tool guardrails and prevent future regressions.
 
@@ -155,30 +155,30 @@ All Gemini Flash references across the plugin are upgraded to the latest **Gemin
 
 | Component Category | Legacy Model Target (v3.5) | Upgraded Latest Model (v3.7) |
 |---|---|---|
-| **Low-Reasoning Orchestrators** | `gemini-3.7-flash-low` | `gemini-3.7-flash-low` |
-| **Standard Skills & Coordinators** | `gemini-3.7-flash-medium` | `gemini-3.7-flash-medium` |
-| **High-Context Skills & Fix Loops** | `gemini-3.7-flash-high` | `gemini-3.7-flash-high` |
-| **Dispatch Budget Ceiling** | `gemini-3.7-flash` | `gemini-3.7-flash` |
+| **Low-Reasoning Orchestrators** | `gemini-3.8-flash-low` | `gemini-3.8-flash-low` |
+| **Standard Skills & Coordinators** | `gemini-3.8-flash-medium` | `gemini-3.8-flash-medium` |
+| **High-Context Skills & Fix Loops** | `gemini-3.8-flash-high` | `gemini-3.8-flash-high` |
+| **Dispatch Budget Ceiling** | `gemini-3.8-flash` | `gemini-3.8-flash` |
 
 ---
 
 ## 🧠 Upgraded Models Mapping Inventory
 
-Lift-SDLC segments work across the latest **`gemini-3.7-flash`** (`-low`, `-medium`, `-high`) and `gemini-3.1-pro` (`-low`, `-high`).
+Lift-SDLC segments work across the latest **`gemini-3.8-flash`** (`-low`, `-medium`, `-high`) and `gemini-3.1-pro` (`-low`, `-high`).
 
 ### Model Mapping Inventory
 
 | Component | Entity Type | Target Model | Role & Rationale |
 |---|---|---|---|
-| `commit-orchestrator` | Orchestrator Agent | `gemini-3.7-flash-low` | Bounded conventional commit drafting |
-| `error-report-orchestrator` | Orchestrator Agent | `gemini-3.7-flash-low` | Crash report template formatting |
-| `harden-orchestrator` | Orchestrator Agent | `gemini-3.7-flash-low` | Bug cause classification & proposal emission |
-| `plan-explore-orchestrator` | Orchestrator Agent | `gemini-3.7-flash-low` | Planning axes derivation & subagent coordinator |
-| `review-orchestrator` | Orchestrator Agent | `gemini-3.7-flash-low` | Scatter-gather review consolidation |
+| `commit-orchestrator` | Orchestrator Agent | `gemini-3.8-flash-low` | Bounded conventional commit drafting |
+| `error-report-orchestrator` | Orchestrator Agent | `gemini-3.8-flash-low` | Crash report template formatting |
+| `harden-orchestrator` | Orchestrator Agent | `gemini-3.8-flash-low` | Bug cause classification & proposal emission |
+| `plan-explore-orchestrator` | Orchestrator Agent | `gemini-3.8-flash-low` | Planning axes derivation & subagent coordinator |
+| `review-orchestrator` | Orchestrator Agent | `gemini-3.8-flash-low` | Scatter-gather review consolidation |
 | `plan-execution-validator` | Orchestrator Agent | `gemini-3.1-pro-low` | Static analysis of plan circularity & collision risks |
 | `plan-generation-orchestrator` | Orchestrator Agent | `gemini-3.1-pro-high` | Multi-wave architecture plan drafting |
-| `/setup-sdlc`, `/plan-sdlc`, `/execute-plan-sdlc` | User Skills | `gemini-3.7-flash-medium` | Interactive coordinators |
-| `/pr-sdlc`, `/received-review-sdlc`, `/verify-pipeline-sdlc`, `/harden-sdlc` | User Skills | `gemini-3.7-flash-high` | High cognitive context skills |
+| `/setup-sdlc`, `/plan-sdlc`, `/execute-plan-sdlc` | User Skills | `gemini-3.8-flash-medium` | Interactive coordinators |
+| `/pr-sdlc`, `/received-review-sdlc`, `/verify-pipeline-sdlc`, `/harden-sdlc` | User Skills | `gemini-3.8-flash-high` | High cognitive context skills |
 
 ---
 
@@ -193,12 +193,12 @@ The following 9 technical optimization proposals outline how to significantly de
 | **1. Dynamic Dimension Pruning** | `/review-sdlc` | Matches changed file paths against dimension rules before scattering subagents. Skips irrelevant review lanes (e.g. skip `security-review` if only CSS/docs changed). | **40% – 60%** (Review) | 🟢 Zero quality loss (eliminates wasteful subagents) |
 | **2. Diff-Hunk Budgeting & Truncation** | `/commit-sdlc`, `/review-sdlc` | Shifts from flat 8KB cap in `diff-truncate.js` to intelligent filtering (e.g. `git diff -U1` fallbacks and lockfile exclusions via `--stat`). | **30% – 50%** (Manifests) | 🟢 Preserves functionality while avoiding truncation loss |
 | **3. Task Fact Sheet Trimming** | `/execute-plan-sdlc` | Injects **only** the target task line and immediate file targets into per-task subagents, rather than passing the complete multi-wave `implementation_plan.md`. | **35% – 50%** (Execution) | 🟢 Cleaner context per task, faster completion |
-| **4. Low-Complexity Fast-Path** | All skills | Automatically routes single-file edits ($<15$ lines), documentation updates, or mechanical refactors to `gemini-3.7-flash-low` with capped output tokens (`max_tokens: 400`). | **25% – 45%** (Routing) | 🟢 Significant speed & cost improvement |
+| **4. Low-Complexity Fast-Path** | All skills | Automatically routes single-file edits ($<15$ lines), documentation updates, or mechanical refactors to `gemini-3.8-flash-low` with capped output tokens (`max_tokens: 400`). | **25% – 45%** (Routing) | 🟢 Significant speed & cost improvement |
 | **5. Commit History Pruning** | `/commit-sdlc` | Reduces recent git style detection history from 15 commits to 5 oneline commits in `.sdlc/tmp/commit-manifest.json`. | **10% – 15%** (Commit) | 🟢 Zero impact on message quality |
-| **6. Review Dimension Model Tier Tuning** | `/review-sdlc` | Assigns `gemini-3.7-flash-low` to lightweight dimensions (`docs`, `syntax`, `comments`) instead of global `flash-medium`. | **15% – 25%** (Review) | 🟢 Faster review response times |
+| **6. Review Dimension Model Tier Tuning** | `/review-sdlc` | Assigns `gemini-3.8-flash-low` to lightweight dimensions (`docs`, `syntax`, `comments`) instead of global `flash-medium`. | **15% – 25%** (Review) | 🟢 Faster review response times |
 | **8. PR Description Diff Budgeting** | `/pr-sdlc` | Applies `diff-truncate.js` (-U1 fallbacks, lockfile exclusions) to `pr.js` to filter massive PR diffs before description generation. | **30% – 50%** (PR Gen) | 🟢 Prevents PR description hallucinations on huge diffs |
 | **9. Dynamic Lane Pruning** | `/plan-sdlc` | Prunes `guardrail-compliance` and `dimension-coverage` lanes dynamically in `plan.js` if those features are empty in the project. | **40%** (Critique) | 🟢 Eliminates 2 wasted subagent dispatches per plan |
-| **7. Outer Coordinator Skill Downgrade** | `/commit-sdlc`, `/version-sdlc` | Downgrades routine wrapper skills from `flash-medium` to `flash-low` (`gemini-3.7-flash-low`) since heavy logic is already handled by scripts & orchestrators. | **10% – 20%** (Wrappers) | 🟢 Lowers coordinator turn overhead |
+| **7. Outer Coordinator Skill Downgrade** | `/commit-sdlc`, `/version-sdlc` | Downgrades routine wrapper skills from `flash-medium` to `flash-low` (`gemini-3.8-flash-low`) since heavy logic is already handled by scripts & orchestrators. | **10% – 20%** (Wrappers) | 🟢 Lowers coordinator turn overhead |
 
 ---
 
@@ -226,7 +226,7 @@ The following 9 technical optimization proposals outline how to significantly de
 #### Proposal 4: Low-Complexity Fast-Path (Automatic Model Tier Routing)
 - **Current Bottleneck**: Trivial tasks (e.g. single-line version bumps or typo fixes) use standard model routing (`flash-medium` or `pro-low`), consuming excessive reasoning budgets.
 - **Optimization Design**:
-  - Add an automatic complexity classifier in `skill/ship.js`: if modified files $= 1$ and diff lines $< 15$, automatically route to `gemini-3.7-flash-low` with a capped response length (`max_tokens: 400`).
+  - Add an automatic complexity classifier in `skill/ship.js`: if modified files $= 1$ and diff lines $< 15$, automatically route to `gemini-3.8-flash-low` with a capped response length (`max_tokens: 400`).
 
 #### Proposal 5: Commit Style History Pruning (`/commit-sdlc`)
 - **Current Bottleneck**: `commit-prepare.js` includes the last 15 commit messages in `.sdlc/tmp/commit-manifest.json` for style inference.
@@ -235,7 +235,7 @@ The following 9 technical optimization proposals outline how to significantly de
 
 #### Proposal 6: Review Dimension Model Tier Tuning
 - **Current Bottleneck**: All review subagents inherit `review.subagent_model` default (`flash-medium`), even for simple syntax or documentation dimensions.
-- **Optimization Design**: Configure per-dimension model overrides in `.sdlc/config.json` (`docs` and `style` dimensions set to `gemini-3.7-flash-low`, reserving `flash-medium`/`pro-low` for `security-review`).
+- **Optimization Design**: Configure per-dimension model overrides in `.sdlc/config.json` (`docs` and `style` dimensions set to `gemini-3.8-flash-low`, reserving `flash-medium`/`pro-low` for `security-review`).
 
 #### Proposal 8: PR Description Diff Budgeting (`/pr-sdlc`)
 - **Current Bottleneck**: Just like `/commit-sdlc`, `scripts/skill/pr.js` injects the raw, unfiltered unified diff (`git diff HEAD...base`) entirely into `PR_CONTEXT_JSON`.
@@ -246,8 +246,8 @@ The following 9 technical optimization proposals outline how to significantly de
 - **Optimization Design**: Dynamically prune these lanes in `scripts/skill/plan.js`. If a project has zero execution guardrails configured, entirely skip spawning the `guardrail-compliance` subagent. If there are no custom review dimensions, skip the `dimension-coverage` subagent.
 
 #### Proposal 7: Outer Coordinator Skill Downgrade
-- **Current Bottleneck**: Wrapper skills like `/commit-sdlc` and `/version-sdlc` specify `gemini-3.7-flash-medium` in frontmatter despite only running CLI scripts and orchestrator dispatches.
-- **Optimization Design**: Update frontmatter in `skills/commit-sdlc/SKILL.md` and `skills/version-sdlc/SKILL.md` to `gemini-3.7-flash-low`.
+- **Current Bottleneck**: Wrapper skills like `/commit-sdlc` and `/version-sdlc` specify `gemini-3.8-flash-medium` in frontmatter despite only running CLI scripts and orchestrator dispatches.
+- **Optimization Design**: Update frontmatter in `skills/commit-sdlc/SKILL.md` and `skills/version-sdlc/SKILL.md` to `gemini-3.8-flash-low`.
 
 ---
 

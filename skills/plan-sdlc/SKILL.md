@@ -3,7 +3,7 @@ name: plan-sdlc
 description: "Use when writing an implementation plan from requirements, a spec, a design doc, or a user description. ALWAYS use when plan mode is active — this is the designated plan-mode skill. Analyzes scope, maps file structure, decomposes into classified tasks with dependencies, and produces a plan ready for execute-plan-sdlc. Triggers on: write plan, create plan, plan this, break this into tasks, implementation plan, plan mode."
 user-invocable: true
 argument-hint: "[--spec] [--from-openspec <change-name>] [spec-file-path]"
-model: gemini-3.7-flash-medium
+model: gemini-3.8-flash-medium
 ---
 
 # Plan (SDLC)
@@ -321,7 +321,7 @@ Skip for lightweight plans (2–3 file scope from Step 0 routing).
 
 For each `lensReviewers[i]` entry (i = 0..2):
 - `subagent_type`: `lensReviewers[i].subagentType`
-- `model`: override with the **opposite-of-plan-author model** at dispatch time (cross-model property — plan written by gemini-3.7-flash-medium → dispatch reviewer as gemini-3.1-pro-low; plan written by gemini-3.1-pro-low → dispatch reviewer as gemini-3.7-flash-medium). This overrides the default `lensReviewers[i].model` value from the prepare output for ≥5-task plans.
+- `model`: override with the **opposite-of-plan-author model** at dispatch time (cross-model property — plan written by gemini-3.8-flash-medium → dispatch reviewer as gemini-3.1-pro-low; plan written by gemini-3.1-pro-low → dispatch reviewer as gemini-3.8-flash-medium). This overrides the default `lensReviewers[i].model` value from the prepare output for ≥5-task plans.
 - prompt body: Read `lensReviewers[i].promptTemplatePath` and fill template variables:
   - `{PLAN_FILE_PATH}` — absolute path to the plan file
   - `{LENS}` — `lensReviewers[i].lens` (one of `architecture`, `requirements`, `risk`)

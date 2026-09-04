@@ -3,7 +3,7 @@ name: execute-plan-sdlc
 description: "Use when the user wants to execute an implementation plan with adaptive intelligence — classifies tasks by complexity and risk, builds optimized dependency waves, critiques wave structure before dispatch, verifies results after each wave, and recovers from failures without stopping. Self-contained: no external sub-skills required. Triggers on: execute plan, run plan, implement plan, autonomous execution, execute this plan. Also auto-triggered when the user accepts a plan from plan-sdlc (plan content is already in conversation context)."
 user-invocable: true
 argument-hint: "[plan-file-path] [--quality full|balanced|minimal] [--resume] [--workspace branch|worktree|prompt] [--rebase auto|skip|prompt] [--auto] [--branch <name>] [--commit-waves] [--plan-file <path>]"
-model: gemini-3.7-flash-medium
+model: gemini-3.8-flash-medium
 ---
 
 # Execute Plan (SDLC)
@@ -216,7 +216,7 @@ Note: for a freshly created worktree from main, HEAD is already on main — the 
 For each task, determine three things:
 
 **1. Complexity class** (drives agent dispatch vs inline execution):
-- **Trivial** — single-file change, config edit, rename, or < 15 lines at a single edit location. A task that edits multiple distinct locations in a single file (e.g., struct definition + interface implementation + init function + getter) is **Standard**, not Trivial, even if total line count is under 15. If there is 1 trivial task in a phase: execute inline. If there are 2+ trivials in the same phase: batch them into a single agent dispatch using the tier's Trivial model (e.g. gemini-3.7-flash-medium in Balanced).
+- **Trivial** — single-file change, config edit, rename, or < 15 lines at a single edit location. A task that edits multiple distinct locations in a single file (e.g., struct definition + interface implementation + init function + getter) is **Standard**, not Trivial, even if total line count is under 15. If there is 1 trivial task in a phase: execute inline. If there are 2+ trivials in the same phase: batch them into a single agent dispatch using the tier's Trivial model (e.g. gemini-3.8-flash-medium in Balanced).
 - **Standard** — multi-file change, feature implementation, test writing. Dispatch to agent.
 - **Complex** — architectural change, cross-cutting concern, touches > 5 files. Dispatch to agent with extra context.
 
@@ -228,8 +228,8 @@ For each task, determine three things:
 **3. Dependencies** — which tasks must complete before this one (based on file outputs/inputs)
 
 **4. Model assignment** (drives which model the dispatched agent uses - Balanced Default):
-- **Trivial** → `gemini-3.7-flash-medium` — capable baseline; avoids syntax errors on simple tasks
-- **Standard** → `gemini-3.7-flash-high` — highly capable, cost-efficient
+- **Trivial** → `gemini-3.8-flash-medium` — capable baseline; avoids syntax errors on simple tasks
+- **Standard** → `gemini-3.8-flash-high` — highly capable, cost-efficient
 - **Complex** → `gemini-3.1-pro-low` — most capable, required for architectural and cross-cutting work
 
 The user selects a quality tier (preset) in Step 4 that applies these mappings (or overrides them).
@@ -280,25 +280,25 @@ Valid values: `full` (Speed), `balanced` (Balanced), `minimal` (Quality). Legacy
 Execution Plan
 ────────────────────────────────────────────
 Pre-wave (1 batch agent, 2 trivial tasks):
-  - Task 1: "short description"     [Trivial → gemini-3.7-flash-medium]
-  - Task 2: "short description"     [Trivial → gemini-3.7-flash-medium]
+  - Task 1: "short description"     [Trivial → gemini-3.8-flash-medium]
+  - Task 2: "short description"     [Trivial → gemini-3.8-flash-medium]
 Wave 1 (N agents — includes 1 batch):
-  Batch (2 trivial tasks → 1 gemini-3.7-flash-medium agent):
-    - Task A: "short description"   [Trivial → gemini-3.7-flash-medium]
-    - Task B: "short description"   [Trivial → gemini-3.7-flash-medium]
-  - Task C: "short description"     [Standard → gemini-3.7-flash-high]
+  Batch (2 trivial tasks → 1 gemini-3.8-flash-medium agent):
+    - Task A: "short description"   [Trivial → gemini-3.8-flash-medium]
+    - Task B: "short description"   [Trivial → gemini-3.8-flash-medium]
+  - Task C: "short description"     [Standard → gemini-3.8-flash-high]
   - Task D: "short description"     [Complex  → gemini-3.1-pro-low]
 Wave 2 (N tasks, parallel):
-  - Task E: "short description"     [Standard → gemini-3.7-flash-high]
+  - Task E: "short description"     [Standard → gemini-3.8-flash-high]
 Wave 3 (N tasks — HIGH RISK, will pause):
   - Task F: "short description"     [Complex  → gemini-3.1-pro-low]
 ────────────────────────────────────────────
 Total: N tasks across N waves + pre-wave
 
 Quality Tiers (Model Presets):
-  minimal) Speed:      N × gemini-3.7-flash-low, N × gemini-3.7-flash-medium, N × gemini-3.7-flash-high  — fast, low cost
-  balanced) Balanced:  N × gemini-3.7-flash-medium, N × gemini-3.7-flash-high, N × gemini-3.1-pro-low      — default ✓
-  full) Quality:       N × gemini-3.7-flash-medium, N × gemini-3.1-pro-low, N × gemini-3.1-pro-high         — max correctness
+  minimal) Speed:      N × gemini-3.8-flash-low, N × gemini-3.8-flash-medium, N × gemini-3.8-flash-high  — fast, low cost
+  balanced) Balanced:  N × gemini-3.8-flash-medium, N × gemini-3.8-flash-high, N × gemini-3.1-pro-low      — default ✓
+  full) Quality:       N × gemini-3.8-flash-medium, N × gemini-3.1-pro-low, N × gemini-3.1-pro-high         — max correctness
 
 Use AskUserQuestion to select a quality tier:
 > Select execution quality tier
@@ -311,7 +311,7 @@ Always present all 3 tiers. Default is Balanced. When the user selects a tier (f
 
 ## Step 5 (DO): Execute
 
-**Pre-wave:** If there is 1 pre-wave trivial task, execute it inline in the main context. If there are 2+ pre-wave trivials, dispatch them as a single batch agent (using the assigned model for Trivial tasks, e.g., gemini-3.7-flash-medium) using the Batched Trivial Tasks Prompt Template in `./resources/classifying-and-waving-tasks.md`. Mark each complete in TodoWrite after inline execution or after the batch agent returns.
+**Pre-wave:** If there is 1 pre-wave trivial task, execute it inline in the main context. If there are 2+ pre-wave trivials, dispatch them as a single batch agent (using the assigned model for Trivial tasks, e.g., gemini-3.8-flash-medium) using the Batched Trivial Tasks Prompt Template in `./resources/classifying-and-waving-tasks.md`. Mark each complete in TodoWrite after inline execution or after the batch agent returns.
 
 This dispatch is NOT a wave-runner Agent — it is a direct batch dispatch from main context for tasks that have no in-wave dependencies.
 
@@ -399,12 +399,12 @@ Options:
    Pass the JSON output as `priorWaveSummary` in the wave-runner prompt. Main context MUST NOT accumulate unbounded per-task narrative across waves — use only the summarizer output for each wave dispatch. Fields: `planSummary`, `completedTaskIds`, `filesAdded`, `filesModified`, `interfacesCreated`, `decisionsFromPriorWaves` (each capped to the most-recent N entries).
 
 Dispatch with:
-- `model: gemini-3.7-flash-low` — The wave-runner orchestrator is permanently locked to flash-low because it performs strict string parsing and routing. It never escalates.
+- `model: gemini-3.8-flash-low` — The wave-runner orchestrator is permanently locked to flash-low because it performs strict string parsing and routing. It never escalates.
 - `mode: bypassPermissions`
 - **`model:` is REQUIRED — no exceptions.** Omitting it causes the wave-runner to inherit the parent model (gemini-3.1-pro-low), defeating the quality-tier system.
 - **DO NOT pass `isolation: "worktree"` (or any other `isolation` value) to the Agent tool.** The SDLC `--workspace worktree` flag controls a separate concept (a sibling git worktree created via `util/worktree-create.js`). Adding `isolation` here creates ephemeral `.sdlc/worktrees/agent-<id>` paths that are not the intended SDLC worktree. (Mirrors the analogous constraint in ship-sdlc/SKILL.md.)
 
-The wave-runner Agent handles in-wave per-task fan-out internally — it dispatches one per-task Agent per Standard/Complex task and one batch Agent (running on the tier's Trivial model, e.g. gemini-3.7-flash-medium in Balanced) for any 2+ Trivials, all within its own context. A single Trivial in a wave is dispatched by the wave-runner as an inline single-agent, not a batch. Per-task retries are the wave-runner's responsibility: max 2 retries per task, escalating one step per retry along the fixed ladder `gemini-3.7-flash-low → gemini-3.7-flash-medium → gemini-3.7-flash-high → gemini-3.1-pro-low → gemini-3.1-pro-high` — see `./resources/wave-runner-template.md` Algorithm §4 for the exact per-starting-model retry chain.
+The wave-runner Agent handles in-wave per-task fan-out internally — it dispatches one per-task Agent per Standard/Complex task and one batch Agent (running on the tier's Trivial model, e.g. gemini-3.8-flash-medium in Balanced) for any 2+ Trivials, all within its own context. A single Trivial in a wave is dispatched by the wave-runner as an inline single-agent, not a batch. Per-task retries are the wave-runner's responsibility: max 2 retries per task, escalating one step per retry along the fixed ladder `gemini-3.8-flash-low → gemini-3.8-flash-medium → gemini-3.8-flash-high → gemini-3.1-pro-low → gemini-3.1-pro-high` — see `./resources/wave-runner-template.md` Algorithm §4 for the exact per-starting-model retry chain.
 
 **5c. Collect and verify** — After the wave-runner Agent returns:
 
@@ -471,7 +471,7 @@ node "<PLUGIN_ROOT>/scripts/util/parse-wave.js" --dispatched-ids '<json-array-of
 Skip for waves containing only Trivial tasks. Skip if the Speed quality tier (`--quality minimal`) was selected.
 
 After mechanical verification passes (Steps 5c.1–4), determine the compliance reviewer model:
-- If the wave contains only Standard tasks: use `gemini-3.7-flash-high`.
+- If the wave contains only Standard tasks: use `gemini-3.8-flash-high`.
 - If the wave contains any Complex tasks or `--quality full` was selected: use `gemini-3.1-pro-low`.
 
 Dispatch a single spec compliance reviewer using the determined model. At dispatch time, Read `./resources/spec-compliance-reviewer.md` and use it as the prompt template. Provide:
@@ -635,7 +635,7 @@ Gate phrasing invariant: the "wave complete" condition throughout Step 5 is alwa
 
 | Failure Type | Recovery Action |
 |---|---|
-| Agent error / incomplete output (gemini-3.7-flash-medium task) | Re-dispatch with failure context: escalate to `gemini-3.7-flash-high` (Retry 1), then to `gemini-3.1-pro-low` (Retry 2) |
+| Agent error / incomplete output (gemini-3.8-flash-medium task) | Re-dispatch with failure context: escalate to `gemini-3.8-flash-high` (Retry 1), then to `gemini-3.1-pro-low` (Retry 2) |
 | Agent error / incomplete output (gemini-3.1-pro-low task) | Re-dispatch with failure context: escalate to `gemini-3.1-pro-high` (Retry 1), then to `gemini-3.1-pro-high` with failure context (Retry 2) |
 | File conflict between agents | Resolve manually in main context; re-run affected verification |
 | Test failure (1-2 tests) | Fix inline in main context |
@@ -675,7 +675,7 @@ Skip this sub-step if `openspecSpecs` is empty (no OpenSpec context was loaded i
 
 Also skip if ALL per-wave spec compliance reviews (Step 5c-bis) passed without issues AND the plan has 3 or fewer waves — the per-wave reviews already provided sufficient coverage in that case.
 
-Otherwise, determine the compliance reviewer model (use `gemini-3.1-pro-low` if any wave contained `Complex` tasks or if `--quality full` was selected; otherwise use `gemini-3.7-flash-high`). Dispatch a single spec compliance reviewer using that model. Read `./resources/spec-compliance-reviewer.md` for the prompt template. Unlike the per-wave review in Step 5c-bis which provides only that wave's tasks, provide:
+Otherwise, determine the compliance reviewer model (use `gemini-3.1-pro-low` if any wave contained `Complex` tasks or if `--quality full` was selected; otherwise use `gemini-3.8-flash-high`). Dispatch a single spec compliance reviewer using that model. Read `./resources/spec-compliance-reviewer.md` for the prompt template. Unlike the per-wave review in Step 5c-bis which provides only that wave's tasks, provide:
 
 - **ALL non-trivial tasks from ALL waves** — full specification text from the plan
 - **Complete `git diff --stat` output** for the entire execution (all waves combined)
@@ -698,7 +698,7 @@ Append to `.sdlc/learnings/log.md`:
 - Plans that needed mid-execution restructuring and why
 - Projects where default wave sizing was too aggressive or too conservative
 - Tasks where missing context caused incorrect agent output
-- Tasks where the default model assignment was insufficient (e.g., a gemini-3.7-flash-medium task that needed gemini-3.7-flash-high, or a gemini-3.7-flash-medium task that needed gemini-3.1-pro-low to handle edge cases)
+- Tasks where the default model assignment was insufficient (e.g., a gemini-3.8-flash-medium task that needed gemini-3.8-flash-high, or a gemini-3.8-flash-medium task that needed gemini-3.1-pro-low to handle edge cases)
 
 Format:
 ```
@@ -817,13 +817,13 @@ On failure or interruption (not all tasks completed), preserve the state file. P
 
 **Batch agent ordering matters for same-file trivials.** When 2+ trivial tasks in a batch touch the same file, include an Ordering Constraints section in the batch prompt that lists the required sequence. Without it, the agent may apply edits in the wrong order and the second edit will conflict with the first.
 
-**Partial batch failure requires per-task extraction.** When a batch agent reports some tasks as SUCCESS and others as FAILED, do not re-dispatch the entire batch. Extract only the failed tasks and re-dispatch each individually with model escalation (gemini-3.7-flash-low → gemini-3.7-flash-medium). Completed tasks in the batch are final — re-running them risks duplicate changes.
+**Partial batch failure requires per-task extraction.** When a batch agent reports some tasks as SUCCESS and others as FAILED, do not re-dispatch the entire batch. Extract only the failed tasks and re-dispatch each individually with model escalation (gemini-3.8-flash-low → gemini-3.8-flash-medium). Completed tasks in the batch are final — re-running them risks duplicate changes.
 
 **Plan drift compounds across waves.** After 3+ waves, the codebase may differ significantly from what the plan assumed. The inter-wave critique (Step 5e) exists specifically to catch this. Skipping it on "obvious" waves is where cascading failures begin.
 
 **Wave sizing heuristics are guidelines.** On resource-constrained systems or when tasks share state (databases, caches), reduce wave size to 2–3 regardless of the heuristic table.
 
-**Model escalation is not a retry substitute.** Escalating from gemini-3.7-flash-medium to gemini-3.7-flash-high (or gemini-3.7-flash-high to gemini-3.1-pro-low) gives the agent more capability, but if the failure was caused by a bad prompt or insufficient context, a stronger model won't help. Always add failure context to the retry prompt regardless of model change. Escalation consumes one of the 2 allowed retries.
+**Model escalation is not a retry substitute.** Escalating from gemini-3.8-flash-medium to gemini-3.8-flash-high (or gemini-3.8-flash-high to gemini-3.1-pro-low) gives the agent more capability, but if the failure was caused by a bad prompt or insufficient context, a stronger model won't help. Always add failure context to the retry prompt regardless of model change. Escalation consumes one of the 2 allowed retries.
 
 **Agents may bypass the Edit tool.** Agents sometimes use bash `sed`, `awk`, Python scripts, or compiled programs in `/tmp` to modify files instead of the Edit tool. These approaches are fragile (wrong line numbers, regex mismatches, wrong working directory) and silently fail — the agent reports success, but the file is unchanged or corrupted. The Hard Constraints in the agent prompt forbid this, but the filesystem verification in Step 5c catches cases where the constraint was ignored.
 

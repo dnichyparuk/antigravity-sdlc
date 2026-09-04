@@ -201,7 +201,7 @@ flowchart TD
 ```
 
 - **Project-Defined Dimensions:** Code reviews are driven by project-specific dimensions (e.g., Security, Performance, API Contracts). Each dimension specifies file-matching globs and exact review instructions.
-- **Configurable & Dimension-Scoped Models:** Subagents default to the model configured in `.sdlc/config.json` (`review.subagent_model`, fallback `gemini-3.7-flash-medium`). Individual dimension files can specify an explicit `model:` override (e.g., `model: gemini-3.1-pro-low` for critical security or database migration reviews).
+- **Configurable & Dimension-Scoped Models:** Subagents default to the model configured in `.sdlc/config.json` (`review.subagent_model`, fallback `gemini-3.8-flash-medium`). Individual dimension files can specify an explicit `model:` override (e.g., `model: gemini-3.1-pro-low` for critical security or database migration reviews).
 - **Parallel Dispatch:** For a given diff, the orchestrator concurrently spawns multiple specialized subagents. This parallelization significantly reduces overall review time.
 - **Targeted Diff Scoping:** A subagent does not read the entire codebase or even the full PR diff. It is strictly scoped to receive only the diff hunks for files matching its dimension's triggers. This precise scoping prevents subagents from getting distracted by unrelated changes.
 - **Orchestrator Deduplication:** Once subagents complete, a central orchestrator merges the findings. It intelligently deduplicates issues flagged on the same line across different dimensions (keeping the highest severity) and catches contradictory recommendations.
@@ -230,7 +230,7 @@ Each task is classified as **Trivial**, **Standard**, or **Complex** based on sc
 | Agent | Model | Notes |
 |---|---|---|
 | **Plan execution orchestrator** | flash-low | Permanently locked — performs routing only. |
-| **Spec compliance reviewer** | Dynamic (`flash-high` / `pro-low`) | Uses `gemini-3.1-pro-low` if the wave contains `Complex` tasks or `--quality full` was selected; otherwise `gemini-3.7-flash-high`. **Skipped on Speed tier** (`--quality minimal`) and trivial-only waves. |
+| **Spec compliance reviewer** | Dynamic (`flash-high` / `pro-low`) | Uses `gemini-3.1-pro-low` if the wave contains `Complex` tasks or `--quality full` was selected; otherwise `gemini-3.8-flash-high`. **Skipped on Speed tier** (`--quality minimal`) and trivial-only waves. |
 | **Plan execution validator** | pro-low | Always pro-low. |
 
 ### Feature Differences by Tier

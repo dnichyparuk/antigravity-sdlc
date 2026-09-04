@@ -5,7 +5,7 @@ triggers:
   - "package.json"
   - "package-lock.json"
 severity: medium
-model: gemini-3.7-flash-medium
+model: gemini-3.8-flash-medium
 ---
 
 # Dependency Management Review
