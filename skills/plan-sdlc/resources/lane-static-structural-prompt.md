@@ -47,7 +47,7 @@ Return a single JSON object as your final output (no prose after the JSON block)
       "gateId": "G1",
       "severity": "error",
       "taskRef": "Task 3",
-      "message": "Requirement R4 has no corresponding task",
+      "message": "Requirement has no corresponding task",
       "blocking": true
     }
   ],

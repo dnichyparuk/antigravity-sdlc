@@ -4,8 +4,9 @@ const test   = require('node:test');
 const assert = require('node:assert/strict');
 const path   = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { PassThrough } = require('node:stream');
 
-const { parseArgs, runParseWave } = require('./parse-wave');
+const { parseArgs, runParseWave, readStdin } = require('./parse-wave');
 
 const SCRIPT = path.join(__dirname, 'parse-wave.js');
 
@@ -99,4 +100,19 @@ test('CLI: exits 1 with a JSON error when --dispatched-ids is malformed', () => 
   assert.equal(res.status, 1);
   const parsed = JSON.parse(res.stdout.trim());
   assert.equal(parsed.schemaOk, false);
+});
+
+// ---------------------------------------------------------------------------
+// readStdin — listener hygiene
+// ---------------------------------------------------------------------------
+
+test('readStdin: removes its data/end/error listeners from the stream on settle', async () => {
+  const stream = new PassThrough();
+  const promise = readStdin(stream);
+  stream.end('WAVE_SUMMARY: {}');
+  const result = await promise;
+  assert.equal(result, 'WAVE_SUMMARY: {}');
+  assert.equal(stream.listenerCount('data'), 0);
+  assert.equal(stream.listenerCount('end'), 0);
+  assert.equal(stream.listenerCount('error'), 0);
 });

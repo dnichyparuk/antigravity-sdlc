@@ -117,6 +117,42 @@ test('parseArgs reports the first unknown parameter', () => {
 });
 
 // ---------------------------------------------------------------------------
+// --help
+// ---------------------------------------------------------------------------
+
+test('--help prints usage to stdout and exits 0, bypassing the JSON protocol', () => {
+  const dir = makeTempDir();
+  try {
+    const res = run(['--help'], dir);
+
+    assert.strictEqual(res.status, 0, res.stderr);
+    assert.strictEqual(res.stderr, '');
+    assert.match(res.stdout, /^Usage: node execute-workspace-setup\.js/);
+    assert.match(res.stdout, /--workspace-flag/);
+    assert.match(res.stdout, /--logical-type/);
+    assert.match(res.stdout, /--derived-slug/);
+    assert.match(res.stdout, /--branch-name/);
+    assert.match(res.stdout, /--help, -h/);
+    // Not JSON — the --help path bypasses the JSON output protocol entirely.
+    assert.strictEqual(res.json, null);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('-h behaves the same as --help', () => {
+  const dir = makeTempDir();
+  try {
+    const res = run(['-h'], dir);
+
+    assert.strictEqual(res.status, 0, res.stderr);
+    assert.match(res.stdout, /^Usage: node execute-workspace-setup\.js/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Success paths
 // ---------------------------------------------------------------------------
 
@@ -267,6 +303,28 @@ test('branch mode: both checkout attempts fail -> error status, exit 2', () => {
     assert.match(result.json.error, /feat\/my-thing/);
     assert.match(result.json.error, /a branch named 'feat\/my-thing' already exists/);
     assert.strictEqual(gitStub.calls.length, 2);
+  } finally {
+    fs.rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('both checkout attempts fail, -b produced no stderr -> falls back to the first checkout\'s stderr', () => {
+  const repo = makeTempRepo();
+  try {
+    const gitStub = makeGitStub([
+      { ok: false, stderr: 'error: pathspec did not match any file(s) known to git' },
+      { ok: false, stderr: '' },
+    ]);
+    const result = runInProcess(
+      ['--workspace-flag', 'branch', '--logical-type', 'feature', '--derived-slug', 'my-thing'],
+      repo,
+      gitStub
+    );
+
+    assert.strictEqual(result.exitCode, 2);
+    assert.strictEqual(result.json.status, 'error');
+    assert.match(result.json.error, /feat\/my-thing/);
+    assert.match(result.json.error, /pathspec did not match any file\(s\) known to git/);
   } finally {
     fs.rmSync(repo, { recursive: true, force: true });
   }

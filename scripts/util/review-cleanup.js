@@ -27,7 +27,7 @@
  * Zero npm dependencies — Node.js built-ins only.
  */
 
-const fs = require('fs');
+const fs = require('node:fs');
 
 function parseArgs(argv) {
   return { manifestFile: argv[2] || null };

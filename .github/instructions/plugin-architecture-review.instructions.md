@@ -10,7 +10,7 @@ Default severity: medium
 ## Checklist
 
 - A hook change (`hooks/*.js`) still returns the expected decision shape for its registered event (`PreToolUse`/`PreInvocation`) — a malformed return can be silently ignored by the host, which looks like the hook "passing" when it actually never ran its check
-- `pre-tool-git-guard.js` and `pre-tool-file-guard.js` changes don't narrow their matcher/condition in a way that lets a previously-blocked destructive operation through (verify against what the hook was specifically added to prevent)
+- `pre-tool-git-guard.js` changes don't narrow their matcher/condition in a way that lets a previously-blocked destructive operation through (verify against what the hook was specifically added to prevent)
 - A new or modified hook fails closed (blocks/warns) rather than fails open (silently allows) on an unexpected error inside the hook itself
 - `hooks.json` matcher patterns are still scoped to the intended tool/event — an over-broad matcher fires (and costs latency) on unrelated tool calls; an over-narrow one silently stops guarding cases it used to cover
 - `plugin.json` version/metadata changes are consistent with what actually changed (a version bump without a matching change, or a real change without a version bump)

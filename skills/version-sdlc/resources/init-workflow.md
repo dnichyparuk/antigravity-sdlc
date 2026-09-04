@@ -42,13 +42,7 @@ Options:
 On `yes` or `changelog`, write the version section to `.sdlc/config.json` using `writeSection` from lib/config.js with
 the content from `suggestedConfig` (adjusted if `changelog` was chosen).
 
-Then scaffold CI scripts and workflows using `scaffold-ci.js`:
-
-```shell
-node "<PLUGIN_ROOT>/scripts/util/scaffold-ci.js" --output-file
-```
-
-Run the scaffold (include `--changelog` when `config.changelog === true`):
+Then scaffold CI scripts and workflows using `scaffold-ci.js` (include `--changelog` when `config.changelog === true`):
 
 ```bash
 # Without changelog:
@@ -91,7 +85,7 @@ Read the JSON output. If any files have `action: "outdated"`:
 Update these files? (yes / no)
 ```
 
-On `yes`, run `node "<PLUGIN_ROOT>/scripts/util/scaffold-ci.js" --force` (add `--changelog` if applicable) to overwrite the outdated files. On `no`, warn:
+On `yes`, run `SCAFFOLD_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/util/scaffold-ci.js" --force)` (add `--changelog` if applicable) to overwrite the outdated files — `scaffold-ci.js` prints a manifest path, so capture it rather than calling `node …` bare. On `no`, warn:
 ```
 ⚠  Skipped update. Outdated CI scripts may miss bug fixes or new features.
 ```

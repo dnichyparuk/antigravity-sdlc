@@ -15,7 +15,7 @@ Migrate all existing `.sh` Bash wrapper scripts across the `lift-sdlc` plugin to
 ### Phase 1: Core Orchestrator Migration
 *Target: Convert heavy orchestrator wrappers.*
 - [x] Migrate `skills/ship-sdlc/scripts/*.sh` (e.g., `prepare.sh`, `workspace_setup.sh`, `todos_wrapper.sh`).
-- [ ] Migrate `skills/execute-plan-sdlc/scripts/*.sh`.
+- [x] Migrate `skills/execute-plan-sdlc/scripts/*.sh`.
 
 ### Phase 2: Setup & Configuration Migration
 *Target: Convert interactive and configuration scripts.*
@@ -29,6 +29,6 @@ Migrate all existing `.sh` Bash wrapper scripts across the `lift-sdlc` plugin to
 - [x] Migrate `skills/verify-pipeline-sdlc/scripts/*.sh`.
 
 ### Phase 4: Prompt Updates & Test Coverage
-- [ ] **Direct Invocation**: Update all `SKILL.md` files to invoke `node <script>.js` instead of the legacy bash wrappers, eliminating the Bash middleman entirely.
+- [x] **Direct Invocation**: Update all `SKILL.md` files to invoke `node <script>.js` instead of the legacy bash wrappers, eliminating the Bash middleman entirely.
 - [ ] **Test Mandate**: Ensure all migrated Node.js scripts are fully backed by unit tests to guarantee reliable git execution and JSON validation across OS boundaries.
 

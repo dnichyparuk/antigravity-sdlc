@@ -10,9 +10,3 @@
 # `git config merge.renormalize true`).
 * text=auto eol=lf
 
-# hooks/pre-tool-file-guard.js is the only executable (mode 100755) .js file
-# in this repo — it carries a `#!/usr/bin/env node` shebang and is invoked
-# directly by some callers, not only via `node <path>`. CRLF line endings
-# break that shebang (`env: 'node\r': No such file or directory`). Pin it to
-# LF regardless of the committer's platform/git config.
-hooks/pre-tool-file-guard.js text eol=lf

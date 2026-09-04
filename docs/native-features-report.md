@@ -25,7 +25,7 @@ graph TD
 The plugin registers event hooks that Antigravity invokes at critical points in the agent lifecycle:
 
 ### A. PreToolUse Hooks
-* **Files**: [`hooks/pre-tool-git-guard.js`](../hooks/pre-tool-git-guard.js), [`hooks/pre-tool-file-guard.js`](../hooks/pre-tool-file-guard.js), [`hooks/pre-tool-validate.js`](../hooks/pre-tool-validate.js).
+* **Files**: [`hooks/pre-tool-git-guard.js`](../hooks/pre-tool-git-guard.js), [`hooks/pre-tool-validate.js`](../hooks/pre-tool-validate.js).
 * **Antigravity Mechanism**: Intercepts tool calls (`run_command`, `write_to_file`, `replace_file_content`) before execution.
 * **Functionality**:
   - Automatically blocks destructive git commands (e.g., `git push --force` or checkout on `main`).

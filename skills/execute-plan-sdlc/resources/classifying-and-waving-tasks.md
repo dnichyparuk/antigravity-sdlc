@@ -90,9 +90,9 @@ When dispatching a wave-runner Agent, permanently lock the orchestrator to `gemi
 
 6. **Apply risk spreading:** If a wave contains > 1 high-risk task, move the excess to the next wave
 
-6a. **Verification-boundary affinity (advisory tiebreaker — Fixes #392 / R34):** when two candidate orderings satisfy all dependency, same-file, wave-size-cap, and risk-spreading constraints equally, prefer the ordering that keeps tasks sharing a verification target (same `Verify:` value AND overlapping `Files:` directory prefixes) in the same wave. **Never sacrifice dependency correctness or any constraint above to honor this — it is a tiebreaker only.** This heuristic helps Step 5c-bis (expectedFiles cross-check) and the spec-compliance reviewer run against a coherent surface per wave.
+6a. **Verification-boundary affinity (advisory tiebreaker):** when two candidate orderings satisfy all dependency, same-file, wave-size-cap, and risk-spreading constraints equally, prefer the ordering that keeps tasks sharing a verification target (same `Verify:` value AND overlapping `Files:` directory prefixes) in the same wave. **Never sacrifice dependency correctness or any constraint above to honor this — it is a tiebreaker only.** This heuristic helps Step 5c-bis (expectedFiles cross-check) and the spec-compliance reviewer run against a coherent surface per wave.
 
-6b. **Compute per-wave `expectedFiles` (Fixes #392 / R34):** for every wave entry in the manifest, set `expectedFiles: string[]` to the deterministic union of every `Files: Create:` / `Files: Modify:` / `Files: Test:` path declared across the wave's tasks. No LLM inference; the plan-sdlc G10 "File existence" gate guarantees exact paths. Set `verificationHint: string` only when every task in the wave shares the same `Verify:` value (verbatim); otherwise omit the field.
+6b. **Compute per-wave `expectedFiles`:** for every wave entry in the manifest, set `expectedFiles: string[]` to the deterministic union of every `Files: Create:` / `Files: Modify:` / `Files: Test:` path declared across the wave's tasks. No LLM inference; the plan-sdlc G10 "File existence" gate guarantees exact paths. Set `verificationHint: string` only when every task in the wave shares the same `Verify:` value (verbatim); otherwise omit the field.
 
    Example wave manifest entry:
 
@@ -119,7 +119,7 @@ When dispatching a wave-runner Agent, permanently lock the orchestrator to `gemi
 
 Complex tasks count as 2 toward the cap (they consume more context and are more likely to conflict).
 
-**Wave sizing is computed by `lib/dispatch-budget.js::computeWaveBudget()`** (R-BYTE-BUDGET, #432), not by a static table. The utility accounts for template scaffolding bytes, guardrails block bytes, per-task fact-sheet sizes, and prior-wave context bytes against the model's input budget. The result is always ≤ the static fallback cap:
+**Wave sizing is computed by `lib/dispatch-budget.js::computeWaveBudget()`**, not by a static table. The utility accounts for template scaffolding bytes, guardrails block bytes, per-task fact-sheet sizes, and prior-wave context bytes against the model's input budget. The result is always ≤ the static fallback cap:
 
 | Total remaining tasks | Static fallback cap |
 |---|---|
@@ -142,7 +142,7 @@ Use this template for every per-task agent dispatch inside wave-runner. Fill all
 You are implementing a single task from a larger plan. Focus only on your assigned task.
 
 <!--
-Cache-stability note (Fixes #392 / R33): Within a single execute-plan-sdlc invocation,
+Cache-stability note: Within a single execute-plan-sdlc invocation,
 `activeGuardrails` is loaded once in Step 1 LOAD and treated as immutable. The rendered
 "## Project Guardrails" block below is therefore byte-identical across every per-task and
 sibling Agent prompt in the run — keep this section above any task-variable content to
@@ -248,7 +248,7 @@ Use this template when dispatching 2+ trivial tasks as a single batch agent insi
 You are implementing a batch of trivial tasks from a larger plan. Complete all tasks in the order listed. Each task is small and self-contained.
 
 <!--
-Cache-stability note (Fixes #392 / R33): same byte-stability requirement as the per-task
+Cache-stability note: same byte-stability requirement as the per-task
 template — guardrails section is static within a run; keep it above task-variable content.
 -->
 

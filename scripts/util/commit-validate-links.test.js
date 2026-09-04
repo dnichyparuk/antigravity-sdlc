@@ -19,6 +19,12 @@ test('commit-validate-links: exits 0 for a body with no URLs, read from stdin (s
   assert.equal(result.stderr, '');
 });
 
+test('commit-validate-links: prints the shared OK success line on stdout', () => {
+  const result = run([], 'chore: tidy up docs, no links in this body');
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /^OK: link verification passed/);
+});
+
 test('commit-validate-links: exits 1 and reports the violation to stderr for a malformed URL (error path)', () => {
   const result = run([], 'See http://[bad for details');
   assert.equal(result.status, 1);
@@ -45,5 +51,5 @@ test('commit-validate-links: exits 2 for an unreadable --file path (error path)'
 test('commit-validate-links: exits 2 for an unknown flag', () => {
   const result = run(['--bogus'], '');
   assert.equal(result.status, 2);
-  assert.match(result.stderr, /unknown parameter/);
+  assert.match(result.stderr, /Unknown parameter/);
 });

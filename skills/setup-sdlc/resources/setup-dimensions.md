@@ -62,10 +62,10 @@ node "<PLUGIN_ROOT>/scripts/ci/validate-dimensions.js" --project-root . --json
 Also check for uncovered file suggestions from a recent review run:
 
 ```shell
-node "<PLUGIN_ROOT>/scripts/skill/review.js" --project-root . --json 2>/dev/null
+REVIEW_MANIFEST=$(node "<PLUGIN_ROOT>/scripts/skill/review.js" --project-root . 2>/dev/null)
 ```
 
-If this succeeds, parse `plan_critique.uncovered_suggestions` and use as additional evidence in Step 3 (cite: "Recent review found N uncovered files matching this pattern"). If the command fails, silently skip.
+`review.js` prints the path of a temp JSON manifest, not the JSON itself. If this succeeds, read `$REVIEW_MANIFEST`, parse `plan_critique.uncovered_suggestions` and use as additional evidence in Step 3 (cite: "Recent review found N uncovered files matching this pattern"). If the command fails, silently skip.
 
 If NOT in expansion mode: skip this step.
 

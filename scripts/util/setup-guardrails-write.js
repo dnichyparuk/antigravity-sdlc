@@ -26,7 +26,7 @@
 
 'use strict';
 
-const path = require('path');
+const path = require('node:path');
 const LIB = path.join(__dirname, '..', 'lib');
 
 const { writeSection } = require(path.join(LIB, 'config'));

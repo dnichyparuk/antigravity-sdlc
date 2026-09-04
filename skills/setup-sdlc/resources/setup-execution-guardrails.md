@@ -15,7 +15,7 @@ Sub-flow of `/setup-sdlc --execution-guardrails`. Runs skill/guardrails.js with 
 Run skill/guardrails.js:
 
 ```shell
-GUARDRAILS_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/guardrails.js" --output-file --project-root . --target execute --mode {init|add} --json)
+GUARDRAILS_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/guardrails.js" --output-file --project-root . --target execute --mode {init|add})
 EXIT_CODE=$?
 echo "GUARDRAILS_OUTPUT_FILE=$GUARDRAILS_OUTPUT_FILE"
 ```
@@ -58,8 +58,10 @@ On **custom**: collect id (validate kebab-case pattern `^[a-z][a-z0-9]*(-[a-z0-9
 Write selected guardrails via the config-writing CLI:
 
 ```shell
-node "<PLUGIN_ROOT>/scripts/util/setup-execution-guardrails-write.js" --section execute --value '<GUARDRAILS_JSON>'
+WRITE_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/util/setup-execution-guardrails-write.js" --section execute --value '<GUARDRAILS_JSON>')
 ```
+
+The write CLI prints the path of a temp JSON manifest, not the JSON itself — read `$WRITE_OUTPUT_FILE` to confirm the write and surface any `errors`.
 
 Replace `<GUARDRAILS_JSON>` with the JSON array of selected guardrails. In `--add` mode: prepend existing guardrails from the prepare output to the array.
 

@@ -34,7 +34,7 @@
  *   process.exit(exitCode);
  */
 
-const fs = require('fs');
+const fs = require('node:fs');
 
 const { validateLinks, formatViolations } = require('./links');
 
@@ -59,22 +59,36 @@ function parseArgs(argv) {
   return args;
 }
 
-function readStdin() {
+function readStdin(stream = process.stdin) {
   return new Promise((resolve, reject) => {
     let buf = '';
-    process.stdin.setEncoding('utf8');
-    process.stdin.on('data', (c) => { buf += c; });
-    process.stdin.on('end', () => resolve(buf));
-    process.stdin.on('error', reject);
-    process.stdin.resume();
+    stream.setEncoding('utf8');
+
+    const onData = (c) => { buf += c; };
+    const onEnd = () => settle(() => resolve(buf));
+    const onError = (err) => settle(() => reject(err));
+
+    function settle(action) {
+      stream.removeListener('data', onData);
+      stream.removeListener('end', onEnd);
+      stream.removeListener('error', onError);
+      action();
+    }
+
+    stream.on('data', onData);
+    stream.on('end', onEnd);
+    stream.on('error', onError);
+    stream.resume();
   });
 }
 
 /**
  * Runs the shared validate-links CLI flow. Writes to stdout/stderr and
- * resolves an exit code (does not call process.exit — callers decide when
- * to exit, and tests can inject stdout/stderr/IO deps instead of hitting
- * the real process streams or filesystem).
+ * resolves an exit code — never rejects, including when `validate()` itself
+ * throws (caught and mapped to exit 2, mirroring the other failure branches
+ * in this function). Does not call process.exit — callers decide when to
+ * exit, and tests can inject stdout/stderr/IO deps instead of hitting the
+ * real process streams or filesystem.
  *
  * @param {string[]} argv  process.argv-shaped array: [node, script, ...args]
  * @param {object} [deps]  injectable dependencies (for tests / reuse)
@@ -123,7 +137,13 @@ async function runValidateLinksCli(argv, deps = {}) {
 
   // ctx intentionally empty — validateLinks() auto-derives expectedRepo /
   // jiraSite. Callers MUST NOT construct ctx JSON (see module docstring).
-  const result = await validate(body, {});
+  let result;
+  try {
+    result = await validate(body, {});
+  } catch (err) {
+    stderr.write(`validate-links-cli: validate() crashed: ${(err && err.stack) || err}\n`);
+    return 2;
+  }
 
   if (result.ok) {
     const skippedNote = result.skipped && result.skipped.length ? ` (${result.skipped.length} skipped)` : '';
@@ -136,4 +156,4 @@ async function runValidateLinksCli(argv, deps = {}) {
   return 1;
 }
 
-module.exports = { runValidateLinksCli, parseArgs };
+module.exports = { runValidateLinksCli, parseArgs, readStdin };

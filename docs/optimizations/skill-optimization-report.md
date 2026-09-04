@@ -676,9 +676,10 @@ model: gemini-3.7-flash-medium
 Announce: "I'm using verify-pipeline-sdlc (sdlc v{sdlc_version})." (omit version if absent).
 
 ## Step 1: Prepare & Classify
-Run the prepare script to resolve logs and classify the failure:
+Run the prepare scripts to resolve logs and classify the failure:
 ```shell
-<PLUGIN_ROOT>/skills/verify-pipeline-sdlc/scripts/prepare.sh $ARGUMENTS
+node "<PLUGIN_ROOT>/scripts/util/fetch-logs.js" --pr-number <N>
+node "<PLUGIN_ROOT>/scripts/skill/verify-pipeline-sdlc-classify.js" --logs-file "$LOGS_FILE"
 ```
 Output schema: `{"status":"ok","category":"<cat>","logs":"<text>","actionable":true|false}` or `{"status":"abort","reason":"<msg>"}`.
 If status is `abort`, output the JSON verbatim and exit.

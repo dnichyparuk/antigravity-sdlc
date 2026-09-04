@@ -358,7 +358,7 @@ async function main() {
       if (currentVersion) {
         currentTag = `${tagPrefix}${currentVersion}`;
         // Read-only: check that the candidate tag exists.
-        const { spawnSync } = require('child_process');
+        const { spawnSync } = require('node:child_process');
         const revParse = spawnSync('git', ['rev-parse', `refs/tags/${currentTag}`], {
           cwd: projectRoot, encoding: 'utf8',
         });

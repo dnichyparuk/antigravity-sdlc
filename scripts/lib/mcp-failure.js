@@ -55,7 +55,7 @@ const REDACTORS = [
   { re: /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*/g, sub: '[jwt:REDACTED]' },
   { re: /cookie:[^;\n]+/gi,                                      sub: 'cookie:[REDACTED]' },
   { re: /(?:cloudId|cloud_id)[=:\s"']+([0-9a-f-]{30,})/gi,     sub: (_, id) => `cloudId=[REDACTED:${id.slice(0,6)}…]` },
-  { re: /\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b/g, sub: '[email:REDACTED]' },
+  { re: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, sub: '[email:REDACTED]' },
 ];
 
 // ---------------------------------------------------------------------------
